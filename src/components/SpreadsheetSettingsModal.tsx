@@ -279,8 +279,9 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  URL de l'application Web Apps Script (se termine par /exec)
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+                  <span>URL de l'application Web Apps Script</span>
+                  <span className="text-[11px] text-emerald-700 font-mono font-normal">se termine par /exec</span>
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -299,6 +300,23 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
                     {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
                     <span>Tester</span>
                   </button>
+                </div>
+
+                {/* Important deployment tips */}
+                <div className="mt-2 p-2.5 rounded-lg bg-gray-50 border border-gray-200 text-[11px] text-gray-600 space-y-1">
+                  <div className="font-semibold text-gray-800">Points indispensables pour éviter l'erreur NetworkError :</div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 font-bold">1.</span>
+                    <span>Dans le déploiement Apps Script, réglez <strong>« Qui a accès »</strong> sur <strong>« Tout le monde » (Anyone)</strong>, et non pas sur « Moi uniquement ».</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 font-bold">2.</span>
+                    <span>L'URL doit se terminer par <code>/exec</code> (ne copiez pas l'URL de test <code>/dev</code> ni l'URL de l'éditeur <code>/edit</code>).</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 font-bold">3.</span>
+                    <span>Si vous modifiez le code, cliquez sur <em>Gérer les déploiements &gt; Crayon &gt; Version : Nouvelle version &gt; Déployer</em>.</span>
+                  </div>
                 </div>
               </div>
 

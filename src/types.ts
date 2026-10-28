@@ -16,12 +16,14 @@ export interface MotifKey {
 
 export interface OperationRecord {
   id: string;
-  dateOperation: string; // jj/mm/AAAA HH:MM:SS
-  dateEvenement: string;  // jj/mm/AAAA or YYYY-MM-DD
-  membre: string;
-  points: number;
-  motif: string;
-  saisiPar?: string;
+  rowNumber?: number; // Row index in Google Sheets (2-indexed)
+  dateRando: string;   // Col A: Date rando (jj/mm/aaaa)
+  membre: string;      // Col B: Nom membre
+  points: number;      // Col C: Points attribués
+  description: string; // Col D: Descriptions / Motif
+  colE?: string;       // Col E: (ne rien mettre - vide)
+  mail: string;        // Col F: Adresse mail de l'utilisateur
+  dateOperation: string; // Col G: Date opérations d'insertion (jj/mm/aaaa hh:mm:ss)
   syncedToGoogleSheets?: boolean;
 }
 

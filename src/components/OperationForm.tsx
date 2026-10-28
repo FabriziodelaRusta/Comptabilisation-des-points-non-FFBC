@@ -8,19 +8,23 @@ import {
   Send,
   CornerDownLeft,
   ChevronDown,
-  Sparkles,
   Info,
+  Pencil,
+  X,
+  CheckCircle,
 } from 'lucide-react';
-import { Member, MotifKey } from '../types';
+import { Member, MotifKey, OperationRecord } from '../types';
 
 interface OperationFormProps {
   member: Member;
   motifs: MotifKey[];
+  editingOperation?: OperationRecord | null;
+  onCancelEdit?: () => void;
   onOpenNewMotifModal: () => void;
   onSubmit: (operationData: {
-    dateEvenement: string;
+    dateRando: string;
     points: number;
-    motif: string;
+    description: string;
   }) => void;
   isLoading: boolean;
 }
@@ -28,11 +32,12 @@ interface OperationFormProps {
 export const OperationForm: React.FC<OperationFormProps> = ({
   member,
   motifs,
+  editingOperation,
+  onCancelEdit,
   onOpenNewMotifModal,
   onSubmit,
   isLoading,
 }) => {
-  // Today's date formatted as YYYY-MM-DD
   const getTodayStr = () => {
     const today = new Date();
     const y = today.getFullYear();
@@ -41,42 +46,69 @@ export const OperationForm: React.FC<OperationFormProps> = ({
     return `${y}-${m}-${d}`;
   };
 
-  const [dateEvenement, setDateEvenement] = useState<string>(getTodayStr());
+  // Convert DD/MM/YYYY to YYYY-MM-DD for <input type="date" />
+  const parseToInputDate = (dateStr: string): string => {
+    if (!dateStr) return getTodayStr();
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        const [d, m, y] = parts;
+        return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      }
+    }
+    return dateStr;
+  };
+
+  const [dateRando, setDateRando] = useState<string>(getTodayStr());
   const [points, setPoints] = useState<number>(3);
-  const [selectedMotif, setSelectedMotif] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const pointsInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Set default motif when motifs change
+  // If in edit mode, populate with operation values
   useEffect(() => {
-    if (motifs.length > 0 && !selectedMotif) {
-      setSelectedMotif(motifs[0].label);
+    if (editingOperation) {
+      setDateRando(parseToInputDate(editingOperation.dateRando));
+      setPoints(editingOperation.points);
+      setDescription(editingOperation.description);
+    } else {
+      if (motifs.length > 0 && !description) {
+        setDescription(motifs[0].label);
+        if (motifs[0].defaultPoints !== undefined) {
+          setPoints(motifs[0].defaultPoints);
+        }
+      }
+    }
+  }, [editingOperation, motifs]);
+
+  // Set default description when motifs change (if not editing)
+  useEffect(() => {
+    if (!editingOperation && motifs.length > 0 && !description) {
+      setDescription(motifs[0].label);
       if (motifs[0].defaultPoints !== undefined) {
         setPoints(motifs[0].defaultPoints);
       }
     }
-  }, [motifs, selectedMotif]);
+  }, [motifs, description, editingOperation]);
 
-  // Handle motif selection change
-  const handleMotifChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newMotifLabel = e.target.value;
-    setSelectedMotif(newMotifLabel);
-    const found = motifs.find((m) => m.label === newMotifLabel);
+  const handleMotifSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setDescription(val);
+    const found = motifs.find((m) => m.label === val);
     if (found?.defaultPoints !== undefined && !isNaN(found.defaultPoints)) {
       setPoints(found.defaultPoints);
     }
   };
 
-  // Quick date selector helpers
   const setQuickDate = (offsetDays: number) => {
     const d = new Date();
     d.setDate(d.getDate() - offsetDays);
     const y = d.getFullYear();
     const m = (d.getMonth() + 1).toString().padStart(2, '0');
     const day = d.getDate().toString().padStart(2, '0');
-    setDateEvenement(`${y}-${m}-${day}`);
+    setDateRando(`${y}-${m}-${day}`);
   };
 
   const handleQuickPoints = (val: number) => {
@@ -91,8 +123,8 @@ export const OperationForm: React.FC<OperationFormProps> = ({
     if (e) e.preventDefault();
     setValidationError(null);
 
-    if (!selectedMotif) {
-      setValidationError('Veuillez sélectionner un motif dans la liste.');
+    if (!description.trim()) {
+      setValidationError('Veuillez sélectionner ou renseigner une description / un motif.');
       return;
     }
 
@@ -102,13 +134,12 @@ export const OperationForm: React.FC<OperationFormProps> = ({
     }
 
     onSubmit({
-      dateEvenement,
+      dateRando,
       points,
-      motif: selectedMotif,
+      description: description.trim(),
     });
   };
 
-  // Handle Enter key across inputs
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -121,32 +152,65 @@ export const OperationForm: React.FC<OperationFormProps> = ({
       ref={formRef}
       onSubmit={handleFormSubmit}
       onKeyDown={handleKeyDown}
-      className="bg-white rounded-2xl p-5 sm:p-6 border border-emerald-200/80 shadow-md space-y-6"
+      className={`rounded-2xl p-5 sm:p-6 border shadow-md space-y-6 transition-all ${
+        editingOperation
+          ? 'bg-amber-50/40 border-amber-400 ring-2 ring-amber-300/40'
+          : 'bg-white border-emerald-200/80'
+      }`}
     >
-      {/* Active Member Callout */}
-      <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50/50 rounded-xl p-3.5 border border-emerald-200 flex flex-wrap items-center justify-between gap-3">
+      {/* Active Member or Edit Mode Callout */}
+      <div
+        className={`rounded-xl p-3.5 border flex flex-wrap items-center justify-between gap-3 ${
+          editingOperation
+            ? 'bg-gradient-to-r from-amber-100 to-amber-50 border-amber-300'
+            : 'bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50/50 border-emerald-200'
+        }`}
+      >
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center font-bold text-sm shadow-sm">
-            {member.nom.charAt(0)}
+          <div
+            className={`w-9 h-9 rounded-xl text-white flex items-center justify-center font-bold text-sm shadow-sm ${
+              editingOperation ? 'bg-amber-600' : 'bg-emerald-700'
+            }`}
+          >
+            {editingOperation ? <Pencil className="w-4 h-4" /> : member.nom.charAt(0)}
           </div>
           <div>
-            <div className="text-xs uppercase tracking-wider font-semibold text-emerald-800">
-              Saisie en cours pour le membre
+            <div
+              className={`text-xs uppercase tracking-wider font-semibold ${
+                editingOperation ? 'text-amber-800' : 'text-emerald-800'
+              }`}
+            >
+              {editingOperation
+                ? `Modification de l'opération (Ligne ${editingOperation.rowNumber || 'Google Sheets'})`
+                : 'Saisie en cours pour le membre'}
             </div>
             <div className="text-base font-bold text-gray-900">{member.nom}</div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {member.matricule && (
-            <span className="text-xs bg-white text-gray-700 px-2.5 py-1 rounded-lg border border-gray-200 font-mono shadow-2xs">
-              {member.matricule}
-            </span>
-          )}
-          {member.pointsActuels !== undefined && (
-            <span className="text-xs bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg shadow-2xs">
-              Solde : {member.pointsActuels} pts
-            </span>
+          {editingOperation ? (
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="inline-flex items-center gap-1 text-xs bg-white text-gray-700 hover:text-red-700 px-3 py-1.5 rounded-lg border border-gray-300 font-semibold shadow-2xs hover:bg-red-50 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Annuler la modification</span>
+            </button>
+          ) : (
+            <>
+              {member.matricule && (
+                <span className="text-xs bg-white text-gray-700 px-2.5 py-1 rounded-lg border border-gray-200 font-mono shadow-2xs">
+                  {member.matricule}
+                </span>
+              )}
+              {member.pointsActuels !== undefined && (
+                <span className="text-xs bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg shadow-2xs">
+                  Solde : {member.pointsActuels} pts
+                </span>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -159,30 +223,28 @@ export const OperationForm: React.FC<OperationFormProps> = ({
       )}
 
       {/* The 3 fields row as requested:
-          1. Petit calendrier pour choisir la date de l'opération
-          2. Champ pour entrer le nombre de points (négatif ou positif)
-          3. Champ pour introduire un motif (liste déroulante table Keys col1 = Form_Points_non_FFBC)
+          Col A: Date rando
+          Col C: Points attribués (+ ou -)
+          Col D: Descriptions (table Keys ou saisie)
       */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
-        {/* Field 1: Mini Calendrier (Date de l'événement) */}
+        {/* Field 1: Col A - Date Rando */}
         <div className="md:col-span-4 space-y-2">
           <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <CalendarIcon className="w-4 h-4 text-emerald-700" />
-              <span>Date de l'événement</span>
+              <span>Date Rando (Col A)</span>
             </span>
             <span className="text-[11px] text-gray-400 font-normal">Calendrier</span>
           </label>
 
-          <div className="relative">
-            <input
-              type="date"
-              required
-              value={dateEvenement}
-              onChange={(e) => setDateEvenement(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-colors shadow-xs"
-            />
-          </div>
+          <input
+            type="date"
+            required
+            value={dateRando}
+            onChange={(e) => setDateRando(e.target.value)}
+            className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-colors shadow-xs"
+          />
 
           {/* Quick Date Pills */}
           <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
@@ -190,7 +252,7 @@ export const OperationForm: React.FC<OperationFormProps> = ({
               type="button"
               onClick={() => setQuickDate(0)}
               className={`text-[11px] px-2 py-0.5 rounded-md font-medium transition-colors ${
-                dateEvenement === getTodayStr()
+                dateRando === getTodayStr()
                   ? 'bg-emerald-700 text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
@@ -214,7 +276,7 @@ export const OperationForm: React.FC<OperationFormProps> = ({
           </div>
         </div>
 
-        {/* Field 2: Points (+ ou -) */}
+        {/* Field 2: Col C - Points attribués */}
         <div className="md:col-span-3 space-y-2">
           <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1.5">
@@ -223,7 +285,7 @@ export const OperationForm: React.FC<OperationFormProps> = ({
               ) : (
                 <MinusCircle className="w-4 h-4 text-red-600" />
               )}
-              <span>Points (+ / -)</span>
+              <span>Points (Col C)</span>
               <span className="text-red-500 font-bold">*</span>
             </span>
             <button
@@ -294,57 +356,59 @@ export const OperationForm: React.FC<OperationFormProps> = ({
           </div>
         </div>
 
-        {/* Field 3: Motif (table Keys col1 = Form_Points_non_FFBC) */}
+        {/* Field 3: Col D - Descriptions (Keys table col1 = Form_Points_non_FFBC) */}
         <div className="md:col-span-5 space-y-2">
           <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Tag className="w-4 h-4 text-amber-600" />
-              <span>Motif (Keys: Form_Points_non_FFBC)</span>
+              <span>Descriptions (Col D)</span>
               <span className="text-red-500 font-bold">*</span>
             </span>
-            <span className="text-[11px] text-gray-400 font-normal">{motifs.length} motifs</span>
-          </label>
-
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <select
-                value={selectedMotif}
-                onChange={handleMotifChange}
-                className="w-full appearance-none px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 pr-9 transition-colors shadow-xs"
-              >
-                {motifs.length === 0 ? (
-                  <option value="">Aucun motif disponible</option>
-                ) : (
-                  motifs.map((m, idx) => (
-                    <option key={`${m.label}-${idx}`} value={m.label}>
-                      {m.label} {m.defaultPoints !== undefined ? `(${m.defaultPoints > 0 ? '+' : ''}${m.defaultPoints} pts)` : ''}
-                    </option>
-                  ))
-                )}
-              </select>
-              <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-
-            {/* Button to open New Motif Form */}
             <button
               type="button"
               onClick={onOpenNewMotifModal}
-              title="Ajouter un nouveau motif dans la table Keys"
-              className="p-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-emerald-950 font-bold shadow-md hover:shadow-lg transition-all duration-150 shrink-0 border border-amber-600/40"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="text-[11px] text-gray-500 flex items-center justify-between pt-0.5">
-            <span>Motif actif pour l'insertion</span>
-            <button
-              type="button"
-              onClick={onOpenNewMotifModal}
-              className="text-emerald-700 hover:underline font-medium"
+              className="text-emerald-700 hover:underline font-medium text-[11px]"
             >
               + Nouveau motif
             </button>
+          </label>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <select
+                  value={description}
+                  onChange={handleMotifSelect}
+                  className="w-full appearance-none px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 pr-9 transition-colors shadow-xs"
+                >
+                  <option value="">Sélectionner un motif de la table Keys...</option>
+                  {motifs.map((m, idx) => (
+                    <option key={`${m.label}-${idx}`} value={m.label}>
+                      {m.label} {m.defaultPoints !== undefined ? `(${m.defaultPoints > 0 ? '+' : ''}${m.defaultPoints} pts)` : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              <button
+                type="button"
+                onClick={onOpenNewMotifModal}
+                title="Ajouter un motif dans la table Keys"
+                className="p-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-emerald-950 font-bold shadow-md hover:shadow-lg transition-all duration-150 shrink-0 border border-amber-600/40"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Free description input (in case user wants to customize) */}
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Ou saisir une description personnalisée..."
+              className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+            />
           </div>
         </div>
       </div>
@@ -354,21 +418,37 @@ export const OperationForm: React.FC<OperationFormProps> = ({
         <div className="text-xs text-gray-500 flex items-center gap-1.5">
           <CornerDownLeft className="w-3.5 h-3.5 text-gray-400" />
           <span>
-            Astuce : Appuyez sur la touche <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-semibold text-gray-700">Entrée ↵</kbd> pour valider et insérer directement dans Google Sheets.
+            Appuyez sur <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-semibold text-gray-700">Entrée ↵</kbd> pour valider.
           </span>
         </div>
 
-        <button
-          type="submit"
-          disabled={isLoading || !selectedMotif}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-50"
-        >
-          <Send className="w-4 h-4" />
-          <span>Valider et Enregistrer l'Opération</span>
-          <span className="text-[10px] bg-emerald-900/40 px-1.5 py-0.5 rounded font-mono">
-            ↵ Enter
-          </span>
-        </button>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          {editingOperation && (
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold text-xs hover:bg-gray-100 transition-colors"
+            >
+              Annuler
+            </button>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoading || !description.trim()}
+            className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
+              editingOperation
+                ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800'
+                : 'bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800'
+            }`}
+          >
+            {editingOperation ? <CheckCircle className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+            <span>{editingOperation ? 'Mettre à jour l\'opération' : 'Valider et Enregistrer l\'Opération'}</span>
+            <span className="text-[10px] bg-black/20 px-1.5 py-0.5 rounded font-mono">
+              ↵ Enter
+            </span>
+          </button>
+        </div>
       </div>
     </form>
   );

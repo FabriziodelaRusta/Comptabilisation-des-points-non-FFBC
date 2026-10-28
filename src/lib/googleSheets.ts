@@ -79,6 +79,29 @@ function doGet(e) {
     return jsonResponse({ success: true, motifs: motifs });
   }
 
+  // 3. Lire les opérations (Colonnes A à G)
+  if (action === 'getOperations') {
+    var sheet = ss.getSheetByName('Opérations');
+    if (!sheet) return jsonResponse({ success: true, operations: [] });
+    var data = sheet.getDataRange().getValues();
+    var operations = [];
+    for (var k = 1; k < data.length; k++) {
+      var r = data[k];
+      if (!r || r.length === 0 || (!r[0] && !r[1])) continue;
+      operations.push({
+        rowNumber: k + 1,
+        dateRando: String(r[0] || ''),
+        membre: String(r[1] || ''),
+        points: Number(r[2]) || 0,
+        description: String(r[3] || ''),
+        colE: '',
+        mail: String(r[5] || ''),
+        dateOperation: String(r[6] || '')
+      });
+    }
+    return jsonResponse({ success: true, operations: operations });
+  }
+
   return jsonResponse({ success: true, status: 'OK', title: ss.getName() });
 }
 
@@ -87,32 +110,70 @@ function doPost(e) {
     var ss = getRpaSpreadsheet();
     var body = JSON.parse(e.postData.contents);
 
+    // 4. Insérer une opération dans la feuille Opérations (Colonnes A à G)
     if (body.action === 'addOperation') {
-      let sheet = ss.getSheetByName('Opérations');
+      var sheet = ss.getSheetByName('Opérations');
       if (!sheet) {
         sheet = ss.insertSheet('Opérations');
-        sheet.appendRow(['Date Opération', 'Date Événement', 'Membre', 'Points', 'Motif', 'Saisi par']);
+        sheet.appendRow([
+          'Date rando',
+          'Nom membre',
+          'Points attribué',
+          'Descriptions',
+          '',
+          'Adresse mail de l\\'utilisateur',
+          'Date opérations d\\'insertion'
+        ]);
       }
       sheet.appendRow([
-        body.dateOperation,
-        body.dateEvenement,
-        body.membre,
-        body.points,
-        body.motif,
-        body.saisiPar || 'WebApp RPA'
+        body.dateRando,         // Col A
+        body.membre,            // Col B
+        body.points,            // Col C
+        body.description,       // Col D
+        "",                     // Col E (vide)
+        body.mail || '',        // Col F
+        body.dateOperation      // Col G (jj/mm/aaaa hh:mm:ss)
       ]);
       return jsonResponse({ success: true });
     }
 
+    // 5. Modifier une opération existante dans la feuille Opérations
+    if (body.action === 'updateOperation' && body.rowNumber) {
+      var sheet = ss.getSheetByName('Opérations');
+      if (sheet) {
+        sheet.getRange(body.rowNumber, 1, 1, 7).setValues([[
+          body.dateRando,
+          body.membre,
+          body.points,
+          body.description,
+          "",
+          body.mail || '',
+          body.dateOperation
+        ]]);
+      }
+      return jsonResponse({ success: true });
+    }
+
+    // 6. Supprimer une opération dans la feuille Opérations
+    if (body.action === 'deleteOperation' && body.rowNumber) {
+      var sheet = ss.getSheetByName('Opérations');
+      if (sheet) {
+        sheet.deleteRow(body.rowNumber);
+      }
+      return jsonResponse({ success: true });
+    }
+
+    // 7. Ajouter un membre dans la feuille Membres
     if (body.action === 'addMember') {
-      let sheet = ss.getSheetByName('Membres');
+      var sheet = ss.getSheetByName('Membres');
       if (!sheet) sheet = ss.insertSheet('Membres');
       sheet.appendRow([body.nom, body.matricule || '', true, 'Ajouté via WebApp']);
       return jsonResponse({ success: true });
     }
 
+    // 8. Ajouter un motif dans la table Keys
     if (body.action === 'addMotif') {
-      let sheet = ss.getSheetByName('Keys');
+      var sheet = ss.getSheetByName('Keys');
       if (!sheet) sheet = ss.insertSheet('Keys');
       sheet.appendRow(['Form_Points_non_FFBC', body.label, body.points || '']);
       return jsonResponse({ success: true });
@@ -132,21 +193,62 @@ function jsonResponse(data) {
  * Call Apps Script Web App
  */
 export async function fetchFromAppsScript(url: string, action: string, params: Record<string, string> = {}) {
+  let cleanUrl = url.trim();
+
+  // Check if user accidentally pasted the Apps Script editor URL (/edit)
+  if (cleanUrl.includes('/edit') || cleanUrl.includes('/d/')) {
+    throw new Error(
+      "Attention : vous avez collé l'URL de l'éditeur Apps Script. Vous devez cliquer sur 'Déployer' > 'Gérer les déploiements' (ou 'Nouveau déploiement') et copier l'URL de l'application Web qui se termine par /exec."
+    );
+  }
+
+  // If user pasted /dev, replace with /exec
+  if (cleanUrl.endsWith('/dev')) {
+    cleanUrl = cleanUrl.replace(/\/dev$/, '/exec');
+  }
+
   const query = new URLSearchParams({ action, ...params }).toString();
-  const fullUrl = `${url}${url.includes('?') ? '&' : '?'}${query}`;
-  const res = await fetch(fullUrl);
-  if (!res.ok) throw new Error(`Erreur Apps Script (${res.status})`);
-  return await res.json();
+  const fullUrl = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}${query}`;
+
+  try {
+    const res = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!res.ok) throw new Error(`Erreur HTTP Apps Script (${res.status})`);
+    return await res.json();
+  } catch (err: any) {
+    if (
+      err?.message?.includes('NetworkError') ||
+      err?.message?.includes('Failed to fetch') ||
+      err?.name === 'TypeError'
+    ) {
+      throw new Error(
+        "Accès refusé par Google (CORS / NetworkError). Dans Google Apps Script : cliquez sur 'Déployer' > 'Gérer les déploiements' > modifiez le déploiement (crayon) > configurez 'Qui a accès' sur 'Tout le monde' (Anyone) au lieu de 'Moi uniquement', puis enregistrez."
+      );
+    }
+    throw err;
+  }
 }
 
 export async function postToAppsScript(url: string, payload: any) {
-  const res = await fetch(url, {
+  let cleanUrl = url.trim();
+  if (cleanUrl.endsWith('/dev')) {
+    cleanUrl = cleanUrl.replace(/\/dev$/, '/exec');
+  }
+
+  const res = await fetch(cleanUrl, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    // Using text/plain avoids CORS preflight OPTIONS which Google Apps Script rejects
     headers: {
       'Content-Type': 'text/plain;charset=utf-8',
     },
+    body: JSON.stringify(payload),
   });
+
   if (!res.ok) throw new Error(`Erreur écriture Apps Script (${res.status})`);
   return await res.json().catch(() => ({ success: true }));
 }
@@ -377,8 +479,29 @@ export async function fetchMotifsFromSheet(
   return motifs;
 }
 
+export function parseOperationDateTime(str: string): number {
+  if (!str) return 0;
+  const parts = str.trim().split(' ');
+  const datePart = parts[0];
+  const timePart = parts[1] || '00:00:00';
+  const [d, m, y] = datePart.split('/').map(Number);
+  const [hh, mm, ss] = timePart.split(':').map(Number);
+  if (d && m && y) {
+    return new Date(y, m - 1, d, hh || 0, mm || 0, ss || 0).getTime();
+  }
+  const parsed = new Date(str).getTime();
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 /**
- * Fetch recent operations from the 'Opérations' sheet
+ * Fetch recent operations from the 'Opérations' sheet (Columns A to G)
+ * Col A: Date rando
+ * Col B: Nom membre
+ * Col C: Points attribué
+ * Col D: Descriptions
+ * Col E: (vide)
+ * Col F: Adresse mail de l'utilisateur
+ * Col G: Date opérations d'insertion (jj/mm/aaaa hh:mm:ss)
  */
 export async function fetchRecentOperationsFromSheet(
   spreadsheetId: string,
@@ -387,7 +510,7 @@ export async function fetchRecentOperationsFromSheet(
   const token = await getAccessToken();
   if (!token) return [];
 
-  const encodedRange = encodeURIComponent(`${sheetName}!A1:F100`);
+  const encodedRange = encodeURIComponent(`${sheetName}!A1:G500`);
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}?valueRenderOption=FORMATTED_VALUE`,
     {
@@ -405,36 +528,41 @@ export async function fetchRecentOperationsFromSheet(
   // Parse rows (ignoring header row 0)
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
-    if (!row || row.length === 0 || !row[0]) continue;
+    if (!row || row.length === 0) continue;
+    // Must have at least a member name or date
+    if (!row[0] && !row[1]) continue;
+
     ops.push({
       id: `op-sheet-${i}`,
-      dateOperation: String(row[0] || ''),
-      dateEvenement: String(row[1] || ''),
-      membre: String(row[2] || ''),
-      points: Number(row[3]) || 0,
-      motif: String(row[4] || ''),
-      saisiPar: String(row[5] || ''),
+      rowNumber: i + 1,
+      dateRando: String(row[0] || ''),
+      membre: String(row[1] || ''),
+      points: Number(row[2]) || 0,
+      description: String(row[3] || ''),
+      colE: '',
+      mail: String(row[5] || ''),
+      dateOperation: String(row[6] || row[0] || ''),
       syncedToGoogleSheets: true,
     });
   }
 
-  // Return most recent first
-  return ops.reverse();
+  // Sort descending by date heure opérations
+  return ops.sort((a, b) => parseOperationDateTime(b.dateOperation) - parseOperationDateTime(a.dateOperation));
 }
 
 /**
- * Insert an operation into the 'Opérations' sheet
+ * Insert an operation into the 'Opérations' sheet (Columns A to G)
  */
 export async function insertOperationToSheet(
   spreadsheetId: string,
   sheetName: string = 'Opérations',
   op: {
-    dateOperation: string;
-    dateEvenement: string;
+    dateRando: string;
     membre: string;
     points: number;
-    motif: string;
-    saisiPar?: string;
+    description: string;
+    mail: string;
+    dateOperation: string;
   }
 ): Promise<{ success: boolean; updatedRange?: string }> {
   const token = await getAccessToken();
@@ -443,7 +571,7 @@ export async function insertOperationToSheet(
   // First, verify if the sheet has a header row
   const checkRes = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-      `${sheetName}!A1:E1`
+      `${sheetName}!A1:G1`
     )}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
@@ -451,10 +579,10 @@ export async function insertOperationToSheet(
   if (checkRes.ok) {
     const checkData = await checkRes.json();
     if (!checkData.values || checkData.values.length === 0) {
-      // Add default header row
+      // Add default header row: Col A à G
       await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-          `${sheetName}!A1:F1`
+          `${sheetName}!A1:G1`
         )}?valueInputOption=USER_ENTERED`,
         {
           method: 'PUT',
@@ -464,7 +592,15 @@ export async function insertOperationToSheet(
           },
           body: JSON.stringify({
             values: [
-              ['Date Opération', 'Date Événement', 'Membre', 'Points', 'Motif', 'Saisi par'],
+              [
+                'Date rando',
+                'Nom membre',
+                'Points attribué',
+                'Descriptions',
+                '',
+                "Adresse mail de l'utilisateur",
+                "Date opérations d'insertion",
+              ],
             ],
           }),
         }
@@ -474,18 +610,19 @@ export async function insertOperationToSheet(
 
   // Append operation row
   const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-    `${sheetName}!A:F`
+    `${sheetName}!A:G`
   )}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
 
   const bodyData = {
     values: [
       [
-        op.dateOperation,
-        formatBelgianDate(op.dateEvenement),
+        formatBelgianDate(op.dateRando),
         op.membre,
         op.points,
-        op.motif,
-        op.saisiPar || 'WebApp RPA',
+        op.description,
+        '',
+        op.mail,
+        op.dateOperation,
       ],
     ],
   };
@@ -501,11 +638,94 @@ export async function insertOperationToSheet(
 
   if (!appendRes.ok) {
     const err = await appendRes.json().catch(() => ({}));
-    throw new Error(err?.error?.message || 'Erreur lors de l\'enregistrement dans Google Sheets.');
+    throw new Error(err?.error?.message || "Erreur lors de l'enregistrement dans Google Sheets.");
   }
 
   const result = await appendRes.json();
   return { success: true, updatedRange: result.updates?.updatedRange };
+}
+
+/**
+ * Update an existing operation in 'Opérations' sheet
+ */
+export async function updateOperationInSheet(
+  spreadsheetId: string,
+  sheetName: string = 'Opérations',
+  op: {
+    rowNumber: number;
+    dateRando: string;
+    membre: string;
+    points: number;
+    description: string;
+    mail: string;
+    dateOperation: string;
+  }
+): Promise<boolean> {
+  const token = await getAccessToken();
+  if (!token) throw new Error('Non authentifié.');
+
+  const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    `${sheetName}!A${op.rowNumber}:G${op.rowNumber}`
+  )}?valueInputOption=USER_ENTERED`;
+
+  const res = await fetch(updateUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      values: [
+        [
+          formatBelgianDate(op.dateRando),
+          op.membre,
+          op.points,
+          op.description,
+          '',
+          op.mail,
+          op.dateOperation,
+        ],
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || "Erreur lors de la modification de l'opération dans Google Sheets.");
+  }
+
+  return true;
+}
+
+/**
+ * Delete an operation from 'Opérations' sheet (clearing row)
+ */
+export async function deleteOperationInSheet(
+  spreadsheetId: string,
+  sheetName: string = 'Opérations',
+  rowNumber: number
+): Promise<boolean> {
+  const token = await getAccessToken();
+  if (!token) throw new Error('Non authentifié.');
+
+  const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    `${sheetName}!A${rowNumber}:G${rowNumber}`
+  )}:clear`;
+
+  const res = await fetch(clearUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || "Erreur lors de la suppression de l'opération dans Google Sheets.");
+  }
+
+  return true;
 }
 
 /**

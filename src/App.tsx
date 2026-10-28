@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   User,
+  Users,
   Calendar,
   PlusCircle,
   Tag,
@@ -18,6 +19,7 @@ import {
   ArrowRight,
   ShieldCheck,
   FileSpreadsheet,
+  Eye,
 } from 'lucide-react';
 import { Member, MotifKey, OperationRecord, SheetConfig, UserProfile } from './types';
 import {
@@ -40,13 +42,16 @@ import {
   fetchMotifsFromSheet,
   fetchRecentOperationsFromSheet,
   insertOperationToSheet,
+  updateOperationInSheet,
+  deleteOperationInSheet,
   addMemberToSheet,
   addMotifToSheet,
   fetchFromAppsScript,
   postToAppsScript,
+  parseOperationDateTime,
 } from './lib/googleSheets';
 import { HeaderBanner } from './components/HeaderBanner';
-import { MemberSelector } from './components/MemberSelector';
+import { MemberSelector, ALL_MEMBERS_OPTION } from './components/MemberSelector';
 import { OperationForm } from './components/OperationForm';
 import { NewMemberModal } from './components/NewMemberModal';
 import { NewMotifModal } from './components/NewMotifModal';
@@ -66,7 +71,6 @@ export default function App() {
       const saved = localStorage.getItem(LOCAL_STORAGE_SHEET_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Normalize any old name to "Points RPA"
         if (!parsed.spreadsheetName || parsed.spreadsheetName.includes('Calcul des Points')) {
           parsed.spreadsheetName = 'Points RPA';
         }
@@ -100,6 +104,7 @@ export default function App() {
 
   // Active selections
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [editingOperation, setEditingOperation] = useState<OperationRecord | null>(null);
 
   // Loading & syncing states
   const [isLoadingMembers, setIsLoadingMembers] = useState<boolean>(false);
@@ -113,12 +118,18 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
 
   // Confirmation Modal state for Workspace mutating operations
-  const [pendingOperation, setPendingOperation] = useState<{
-    member: Member;
-    dateEvenement: string;
-    points: number;
-    motif: string;
-    dateOperation: string;
+  const [confirmationData, setConfirmationData] = useState<{
+    actionType: 'insert' | 'update' | 'delete';
+    operation: {
+      id?: string;
+      rowNumber?: number;
+      dateRando: string;
+      membre: string;
+      points: number;
+      description: string;
+      mail: string;
+      dateOperation: string;
+    };
   } | null>(null);
 
   // Toast notifications
@@ -196,6 +207,29 @@ export default function App() {
           setMotifs(keysRes.motifs);
         }
 
+        const opsRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getOperations');
+        if (opsRes?.success && Array.isArray(opsRes.operations)) {
+          setOperations(
+            opsRes.operations
+              .map((op: any, i: number) => ({
+                id: `op-as-${i}`,
+                rowNumber: op.rowNumber,
+                dateRando: op.dateRando,
+                membre: op.membre,
+                points: Number(op.points) || 0,
+                description: op.description,
+                colE: '',
+                mail: op.mail,
+                dateOperation: op.dateOperation,
+                syncedToGoogleSheets: true,
+              }))
+              .sort(
+                (a: OperationRecord, b: OperationRecord) =>
+                  parseOperationDateTime(b.dateOperation) - parseOperationDateTime(a.dateOperation)
+              )
+          );
+        }
+
         showToast('Synchronisé avec succès via votre script Google Apps Script !', 'success');
       } catch (err: any) {
         console.error('Erreur Apps Script:', err);
@@ -237,17 +271,7 @@ export default function App() {
         sheetConfig.operationsSheetName
       );
       if (sheetOperations && sheetOperations.length > 0) {
-        setOperations((prev) => {
-          const map = new Map<string, OperationRecord>();
-          sheetOperations.forEach((op) => map.set(`${op.dateOperation}-${op.membre}`, op));
-          prev.forEach((op) => {
-            const key = `${op.dateOperation}-${op.membre}`;
-            if (!map.has(key)) map.set(key, op);
-          });
-          return Array.from(map.values()).sort(
-            (a, b) => b.dateOperation.localeCompare(a.dateOperation)
-          );
-        });
+        setOperations(sheetOperations);
       }
 
       showToast('Synchronisation avec Google Sheets réussie !', 'success');
@@ -260,7 +284,6 @@ export default function App() {
     }
   }, [sheetConfig]);
 
-  // Load when connected or config changes
   useEffect(() => {
     if (sheetConfig.appsScriptUrl) {
       loadDataFromGoogleSheets();
@@ -283,11 +306,9 @@ export default function App() {
         setIsGoogleConnected(true);
         showToast(`Connecté avec le compte ${res.user.email}`, 'success');
 
-        // If spreadsheet ID is already set, load data
         if (sheetConfig.spreadsheetId) {
           loadDataFromGoogleSheets();
         } else {
-          // Open settings to let user paste their Google Sheet link
           setIsSettingsModalOpen(true);
         }
       }
@@ -304,7 +325,7 @@ export default function App() {
     showToast('Déconnecté du compte Google.', 'info');
   };
 
-  // Handle adding a new member
+  // Add Member handler
   const handleAddMember = async (memberData: { nom: string; prenom?: string; matricule?: string }) => {
     setActionLoading(true);
     try {
@@ -312,7 +333,6 @@ export default function App() {
         ? `${memberData.nom} ${memberData.prenom}`
         : memberData.nom;
 
-      // If connected via Apps Script
       if (sheetConfig.appsScriptUrl) {
         await postToAppsScript(sheetConfig.appsScriptUrl, {
           action: 'addMember',
@@ -320,7 +340,6 @@ export default function App() {
           matricule: memberData.matricule || '',
         });
       } else if (isGoogleConnected && sheetConfig.spreadsheetId) {
-        // If connected via Google Sheets OAuth API
         await addMemberToSheet(
           sheetConfig.spreadsheetId,
           sheetConfig.membresSheetName,
@@ -348,7 +367,7 @@ export default function App() {
     }
   };
 
-  // Handle adding a new motif
+  // Add Motif handler
   const handleAddMotif = async (label: string, defaultPoints?: number) => {
     setActionLoading(true);
     try {
@@ -383,114 +402,236 @@ export default function App() {
     }
   };
 
-  // Step 1 of operation submission: prompt user with confirmation dialog
-  const handleInitiateOperation = (operationData: {
-    dateEvenement: string;
+  // 1. Submit from OperationForm (Insert or Update)
+  const handleFormSubmit = (data: {
+    dateRando: string;
     points: number;
-    motif: string;
+    description: string;
   }) => {
-    if (!selectedMember) {
-      showToast('Veuillez d\'abord sélectionner un membre RPA.', 'error');
+    if (!selectedMember || selectedMember.nom === 'Tous') {
+      showToast('Veuillez sélectionner un membre spécifique pour cette opération.', 'error');
       return;
     }
 
     const currentTimestamp = formatBelgianDateTime(new Date());
+    const userMail = currentUser?.email || 'secretaire@rpa.be';
 
-    setPendingOperation({
-      member: selectedMember,
-      dateEvenement: operationData.dateEvenement,
-      points: operationData.points,
-      motif: operationData.motif,
-      dateOperation: currentTimestamp,
+    if (editingOperation) {
+      // Update action
+      setConfirmationData({
+        actionType: 'update',
+        operation: {
+          id: editingOperation.id,
+          rowNumber: editingOperation.rowNumber,
+          dateRando: formatBelgianDate(data.dateRando),
+          membre: selectedMember.nom,
+          points: data.points,
+          description: data.description,
+          mail: editingOperation.mail || userMail,
+          dateOperation: editingOperation.dateOperation || currentTimestamp,
+        },
+      });
+    } else {
+      // Insert action
+      setConfirmationData({
+        actionType: 'insert',
+        operation: {
+          dateRando: formatBelgianDate(data.dateRando),
+          membre: selectedMember.nom,
+          points: data.points,
+          description: data.description,
+          mail: userMail,
+          dateOperation: currentTimestamp,
+        },
+      });
+    }
+  };
+
+  // 2. Trigger edit from list row (Pencil button)
+  const handleEditOperation = (op: OperationRecord) => {
+    setEditingOperation(op);
+    // Find member or set matching name
+    const found = members.find((m) => m.nom.toLowerCase() === op.membre.toLowerCase());
+    if (found) {
+      setSelectedMember(found);
+    } else {
+      setSelectedMember({
+        nom: op.membre,
+        afficherMajManuelle: true,
+      });
+    }
+    // Scroll smoothly to form
+    window.scrollTo({ top: 180, behavior: 'smooth' });
+    showToast(`Opération de ${op.membre} rechargée pour modification.`, 'info');
+  };
+
+  // 3. Trigger delete from list row (Trash button)
+  const handleDeleteOperation = (op: OperationRecord) => {
+    setConfirmationData({
+      actionType: 'delete',
+      operation: {
+        id: op.id,
+        rowNumber: op.rowNumber,
+        dateRando: op.dateRando,
+        membre: op.membre,
+        points: op.points,
+        description: op.description,
+        mail: op.mail,
+        dateOperation: op.dateOperation,
+      },
     });
   };
 
-  // Step 2: Confirm and write to Google Sheets (Opérations sheet)
-  const handleConfirmOperation = async () => {
-    if (!pendingOperation) return;
+  // 4. Confirm action in ConfirmationModal (Insert, Update, or Delete)
+  const handleExecuteConfirmedAction = async () => {
+    if (!confirmationData) return;
 
     setActionLoading(true);
+    const { actionType, operation: op } = confirmationData;
+
     try {
-      const { member, dateEvenement, points, motif, dateOperation } = pendingOperation;
+      if (actionType === 'insert') {
+        let synced = false;
 
-      let synced = false;
+        if (sheetConfig.appsScriptUrl) {
+          await postToAppsScript(sheetConfig.appsScriptUrl, {
+            action: 'addOperation',
+            dateRando: op.dateRando,
+            membre: op.membre,
+            points: op.points,
+            description: op.description,
+            mail: op.mail,
+            dateOperation: op.dateOperation,
+          });
+          synced = true;
+        } else if (isGoogleConnected && sheetConfig.spreadsheetId) {
+          await insertOperationToSheet(sheetConfig.spreadsheetId, sheetConfig.operationsSheetName, {
+            dateRando: op.dateRando,
+            membre: op.membre,
+            points: op.points,
+            description: op.description,
+            mail: op.mail,
+            dateOperation: op.dateOperation,
+          });
+          synced = true;
+        }
 
-      // Mode 1: Apps Script Web App
-      if (sheetConfig.appsScriptUrl) {
-        await postToAppsScript(sheetConfig.appsScriptUrl, {
-          action: 'addOperation',
-          dateOperation,
-          dateEvenement: formatBelgianDate(dateEvenement),
-          membre: member.nom,
-          points,
-          motif,
-          saisiPar: currentUser?.email || 'WebApp RPA',
-        });
-        synced = true;
-      } else if (isGoogleConnected && sheetConfig.spreadsheetId) {
-        // Mode 2: Direct Google Sheets API
-        await insertOperationToSheet(
-          sheetConfig.spreadsheetId,
-          sheetConfig.operationsSheetName,
-          {
-            dateOperation,
-            dateEvenement,
-            membre: member.nom,
-            points,
-            motif,
-            saisiPar: currentUser?.email || 'WebApp RPA',
-          }
+        const newOpRecord: OperationRecord = {
+          id: `op-${Date.now()}`,
+          rowNumber: operations.length + 2,
+          dateRando: op.dateRando,
+          membre: op.membre,
+          points: op.points,
+          description: op.description,
+          colE: '',
+          mail: op.mail,
+          dateOperation: op.dateOperation,
+          syncedToGoogleSheets: synced,
+        };
+
+        setOperations((prev) => [newOpRecord, ...prev]);
+
+        // Update member points
+        setMembers((prev) =>
+          prev.map((m) =>
+            m.nom === op.membre ? { ...m, pointsActuels: (m.pointsActuels || 0) + op.points } : m
+          )
         );
-        synced = true;
+
+        showToast(
+          synced
+            ? `Opération enregistrée dans Points RPA pour ${op.membre} (${op.points > 0 ? '+' : ''}${op.points} pts) !`
+            : `Opération enregistrée en local pour ${op.membre} !`,
+          'success'
+        );
+      } else if (actionType === 'update') {
+        let synced = false;
+
+        if (sheetConfig.appsScriptUrl) {
+          await postToAppsScript(sheetConfig.appsScriptUrl, {
+            action: 'updateOperation',
+            rowNumber: op.rowNumber,
+            dateRando: op.dateRando,
+            membre: op.membre,
+            points: op.points,
+            description: op.description,
+            mail: op.mail,
+            dateOperation: op.dateOperation,
+          });
+          synced = true;
+        } else if (isGoogleConnected && sheetConfig.spreadsheetId && op.rowNumber) {
+          await updateOperationInSheet(sheetConfig.spreadsheetId, sheetConfig.operationsSheetName, {
+            rowNumber: op.rowNumber,
+            dateRando: op.dateRando,
+            membre: op.membre,
+            points: op.points,
+            description: op.description,
+            mail: op.mail,
+            dateOperation: op.dateOperation,
+          });
+          synced = true;
+        }
+
+        // Update in local state
+        setOperations((prev) =>
+          prev.map((item) =>
+            item.id === op.id || (op.rowNumber && item.rowNumber === op.rowNumber)
+              ? {
+                  ...item,
+                  dateRando: op.dateRando,
+                  points: op.points,
+                  description: op.description,
+                  mail: op.mail,
+                  syncedToGoogleSheets: synced,
+                }
+              : item
+          )
+        );
+
+        setEditingOperation(null);
+        showToast('Opération modifiée avec succès dans Points RPA !', 'success');
+      } else if (actionType === 'delete') {
+        let synced = false;
+
+        if (sheetConfig.appsScriptUrl) {
+          await postToAppsScript(sheetConfig.appsScriptUrl, {
+            action: 'deleteOperation',
+            rowNumber: op.rowNumber,
+          });
+          synced = true;
+        } else if (isGoogleConnected && sheetConfig.spreadsheetId && op.rowNumber) {
+          await deleteOperationInSheet(sheetConfig.spreadsheetId, sheetConfig.operationsSheetName, op.rowNumber);
+          synced = true;
+        }
+
+        // Remove from local state
+        setOperations((prev) =>
+          prev.filter((item) => item.id !== op.id && (op.rowNumber ? item.rowNumber !== op.rowNumber : true))
+        );
+
+        // Adjust member points
+        setMembers((prev) =>
+          prev.map((m) =>
+            m.nom === op.membre ? { ...m, pointsActuels: (m.pointsActuels || 0) - op.points } : m
+          )
+        );
+
+        if (editingOperation && editingOperation.id === op.id) {
+          setEditingOperation(null);
+        }
+
+        showToast('Opération supprimée avec succès !', 'info');
       }
 
-      // Add to local operation log
-      const newOpRecord: OperationRecord = {
-        id: `op-${Date.now()}`,
-        dateOperation,
-        dateEvenement: formatBelgianDate(dateEvenement),
-        membre: member.nom,
-        points,
-        motif,
-        saisiPar: currentUser?.email || 'WebApp RPA',
-        syncedToGoogleSheets: synced,
-      };
-
-      setOperations((prev) => [newOpRecord, ...prev]);
-
-      // Update member's current points in local state
-      setMembers((prev) =>
-        prev.map((m) =>
-          m.nom === member.nom
-            ? { ...m, pointsActuels: (m.pointsActuels || 0) + points }
-            : m
-        )
-      );
-
-      // Also update selectedMember's point cache
-      setSelectedMember((prev) =>
-        prev && prev.nom === member.nom
-          ? { ...prev, pointsActuels: (prev.pointsActuels || 0) + points }
-          : prev
-      );
-
-      showToast(
-        synced
-          ? `Opération enregistrée dans Google Sheets pour ${member.nom} (${points > 0 ? '+' : ''}${points} pts) !`
-          : `Opération enregistrée en local pour ${member.nom} (${points > 0 ? '+' : ''}${points} pts) ! Connectez votre classeur pour la synchronisation Google Sheets.`,
-        'success'
-      );
-
-      setPendingOperation(null);
+      setConfirmationData(null);
     } catch (err: any) {
-      console.error('Erreur lors de l\'enregistrement:', err);
-      showToast(err?.message || 'Erreur lors de l\'enregistrement dans Google Sheets.', 'error');
+      console.error('Erreur exécution action:', err);
+      showToast(err?.message || 'Erreur lors du traitement.', 'error');
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Restore sample data
   const handleLoadDemoData = () => {
     setMembers(DEFAULT_MEMBERS);
     setMotifs(DEFAULT_MOTIFS);
@@ -500,8 +641,10 @@ export default function App() {
       spreadsheetId: '',
       isCustomConfigured: false,
     }));
-    showToast('Données de démonstration RPA chargées avec succès.', 'info');
+    showToast('Données de démonstration RPA rechargées.', 'info');
   };
+
+  const isAllMembersSelected = selectedMember?.nom === 'Tous';
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-gray-900 selection:bg-emerald-500 selection:text-white">
@@ -569,29 +712,36 @@ export default function App() {
           </div>
         )}
 
-        {/* Card: Primary Saisie Workflow */}
+        {/* Section: Saisie Workflow */}
         <section className="bg-white rounded-3xl border border-gray-200/90 shadow-sm p-6 sm:p-8 space-y-6">
           <div className="border-b border-gray-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <span className="text-[11px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                Étape 1 & 2
+                {isAllMembersSelected ? 'Consultation Globale' : 'Saisie & Gestion'}
               </span>
               <h2 className="text-lg sm:text-xl font-extrabold text-gray-900 mt-1">
-                Saisie d'une Opération de Points Non-FFBC
+                {isAllMembersSelected
+                  ? 'Historique Global des Points Non-FFBC'
+                  : 'Saisie d\'une Opération de Points Non-FFBC'}
               </h2>
             </div>
             <div className="text-xs text-gray-500 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>Horodatage automatique : jj/mm/AAAA HH:MM:SS</span>
+              <span>Colonnes : A=Date Rando, B=Nom, C=Points, D=Descriptions, F=Mail, G=Date Opération</span>
             </div>
           </div>
 
-          {/* Step 1: Member Selector with Search and Pencil icon */}
+          {/* Member Selector with Search, Pencil icon, and 'Tous' pseudo-member */}
           <div className="space-y-3">
             <MemberSelector
               members={members}
               selectedMember={selectedMember}
-              onSelectMember={setSelectedMember}
+              onSelectMember={(mem) => {
+                setSelectedMember(mem);
+                if (editingOperation && mem?.nom !== editingOperation.membre) {
+                  setEditingOperation(null);
+                }
+              }}
               onOpenNewMemberModal={(initialName) => {
                 setNewMemberInitialName(initialName || '');
                 setIsNewMemberModalOpen(true);
@@ -600,14 +750,31 @@ export default function App() {
             />
           </div>
 
-          {/* Step 2: Once member is chosen, display the 3 fields underneath as requested */}
-          {selectedMember ? (
+          {/* If 'Tous' is selected: DO NOT display input form, only show overview notice */}
+          {isAllMembersSelected ? (
+            <div className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-950">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-emerald-950 flex items-center justify-center font-bold shrink-0">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm">Mode consultation : Tous les membres sélectionnés</h4>
+                  <p className="text-xs text-amber-800/90 mt-0.5">
+                    Les champs de saisie sont masqués. Toutes les opérations de la feuille <strong>Opérations</strong> sont listées ci-dessous par ordre antéchronologique. Pour saisir des points, choisissez un membre individuel dans la liste déroulante.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : selectedMember ? (
+            /* Specific member selected: display the 3 fields underneath */
             <div className="pt-2 animate-in fade-in duration-200">
               <OperationForm
                 member={selectedMember}
                 motifs={motifs}
+                editingOperation={editingOperation}
+                onCancelEdit={() => setEditingOperation(null)}
                 onOpenNewMotifModal={() => setIsNewMotifModalOpen(true)}
-                onSubmit={handleInitiateOperation}
+                onSubmit={handleFormSubmit}
                 isLoading={actionLoading}
               />
             </div>
@@ -618,24 +785,27 @@ export default function App() {
               </div>
               <div className="max-w-md mx-auto">
                 <h3 className="text-sm font-bold text-gray-800">
-                  Veuillez choisir un membre RPA dans la liste déroulante ci-dessus
+                  Choisissez un membre RPA ou « Tous » dans la liste ci-dessus
                 </h3>
                 <p className="text-xs text-gray-500 mt-1">
-                  Une fois le membre sélectionné, les champs pour choisir la <strong>date</strong>, le <strong>nombre de points (+/-)</strong> et le <strong>motif</strong> apparaîtront directement ici.
+                  Sélectionnez un membre pour lui attribuer des points (date rando, points, description) ou choisissez <strong>« Tous »</strong> pour consulter l'ensemble des opérations du club.
                 </p>
               </div>
             </div>
           )}
         </section>
 
-        {/* Section: Recent Operations History Table */}
+        {/* Section: Filtered Operations List with Pencil & Trash */}
         <section>
           <RecentOperationsList
             operations={operations}
+            selectedMember={selectedMember}
             spreadsheetName={sheetConfig.spreadsheetName}
             isGoogleConnected={isGoogleConnected}
+            onEditOperation={handleEditOperation}
+            onDeleteOperation={handleDeleteOperation}
             onSelectMemberFilter={(nom) => {
-              const found = members.find((m) => m.nom === nom);
+              const found = members.find((m) => m.nom.toLowerCase() === nom.toLowerCase());
               if (found) {
                 setSelectedMember(found);
                 window.scrollTo({ top: 120, behavior: 'smooth' });
@@ -662,16 +832,17 @@ export default function App() {
       />
 
       <ConfirmationModal
-        isOpen={Boolean(pendingOperation)}
-        member={pendingOperation?.member || null}
-        dateEvenement={pendingOperation ? formatBelgianDate(pendingOperation.dateEvenement) : ''}
-        points={pendingOperation?.points || 0}
-        motif={pendingOperation?.motif || ''}
-        dateOperation={pendingOperation?.dateOperation || ''}
+        isOpen={Boolean(confirmationData)}
+        actionType={confirmationData?.actionType || 'insert'}
+        memberName={confirmationData?.operation.membre || ''}
+        dateRando={confirmationData?.operation.dateRando || ''}
+        points={confirmationData?.operation.points || 0}
+        description={confirmationData?.operation.description || ''}
+        dateOperation={confirmationData?.operation.dateOperation || ''}
         spreadsheetName={sheetConfig.spreadsheetName}
         isLoading={actionLoading}
-        onConfirm={handleConfirmOperation}
-        onCancel={() => setPendingOperation(null)}
+        onConfirm={handleExecuteConfirmedAction}
+        onCancel={() => setConfirmationData(null)}
       />
 
       <SpreadsheetSettingsModal

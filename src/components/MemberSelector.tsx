@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   User,
+  Users,
   ChevronDown,
   Search,
   Pencil,
@@ -11,6 +12,13 @@ import {
   Award,
 } from 'lucide-react';
 import { Member } from '../types';
+
+export const ALL_MEMBERS_OPTION: Member = {
+  id: 'mem-all',
+  nom: 'Tous',
+  prenom: 'les membres',
+  afficherMajManuelle: true,
+};
 
 interface MemberSelectorProps {
   members: Member[];
@@ -94,24 +102,45 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
         >
           {selectedMember ? (
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
-                <UserCheck className="w-4 h-4" />
+              <div
+                className={`w-8 h-8 rounded-lg text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm ${
+                  selectedMember.nom === 'Tous' ? 'bg-amber-600' : 'bg-emerald-700'
+                }`}
+              >
+                {selectedMember.nom === 'Tous' ? (
+                  <Users className="w-4 h-4 text-white" />
+                ) : (
+                  <UserCheck className="w-4 h-4" />
+                )}
               </div>
               <div className="truncate">
-                <div className="font-semibold text-gray-900 text-sm sm:text-base truncate">
-                  {selectedMember.nom}
-                </div>
-                <div className="text-[11px] text-gray-500 flex items-center gap-2">
-                  {selectedMember.matricule && (
-                    <span className="bg-gray-100 text-gray-700 px-1.5 py-0.2 rounded font-mono">
-                      {selectedMember.matricule}
+                <div className="font-semibold text-gray-900 text-sm sm:text-base truncate flex items-center gap-2">
+                  <span>{selectedMember.nom}</span>
+                  {selectedMember.nom === 'Tous' && (
+                    <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full border border-amber-300">
+                      Affichage de toutes les opérations
                     </span>
                   )}
-                  {selectedMember.pointsActuels !== undefined && (
-                    <span className="text-emerald-700 font-medium flex items-center gap-0.5">
-                      <Award className="w-3 h-3 inline text-amber-500" />
-                      {selectedMember.pointsActuels} pts actuels
+                </div>
+                <div className="text-[11px] text-gray-500 flex items-center gap-2">
+                  {selectedMember.nom === 'Tous' ? (
+                    <span className="text-gray-500 italic">
+                      Mode consultation de l'historique complet
                     </span>
+                  ) : (
+                    <>
+                      {selectedMember.matricule && (
+                        <span className="bg-gray-100 text-gray-700 px-1.5 py-0.2 rounded font-mono">
+                          {selectedMember.matricule}
+                        </span>
+                      )}
+                      {selectedMember.pointsActuels !== undefined && (
+                        <span className="text-emerald-700 font-medium flex items-center gap-0.5">
+                          <Award className="w-3 h-3 inline text-amber-500" />
+                          {selectedMember.pointsActuels} pts actuels
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -190,6 +219,40 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
 
           {/* Member list items */}
           <div className="max-h-64 overflow-y-auto divide-y divide-gray-50">
+            {/* Special 'Tous' option */}
+            {(!searchQuery || 'tous'.includes(searchQuery.toLowerCase())) && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectMember(ALL_MEMBERS_OPTION);
+                  setIsOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-sm transition-colors border-b border-amber-100 ${
+                  selectedMember?.nom === 'Tous'
+                    ? 'bg-amber-50 text-amber-950 font-bold'
+                    : 'bg-amber-50/40 hover:bg-amber-100/60 text-amber-900'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full bg-amber-500 text-emerald-950 flex items-center justify-center text-xs font-bold shadow-xs">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-amber-950 flex items-center gap-2">
+                      <span>Tous les membres</span>
+                      <span className="text-[10px] bg-amber-200 text-amber-900 font-semibold px-1.5 py-0.2 rounded">
+                        Consultation
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-amber-800/80">
+                      Affiche toutes les opérations du tableau
+                    </div>
+                  </div>
+                </div>
+                {selectedMember?.nom === 'Tous' && <Check className="w-4 h-4 text-amber-700 font-bold" />}
+              </button>
+            )}
+
             {filteredMembers.length > 0 ? (
               filteredMembers.map((member) => {
                 const isSelected = selectedMember?.nom === member.nom;
