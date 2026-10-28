@@ -64,13 +64,20 @@ export default function App() {
   const [sheetConfig, setSheetConfig] = useState<SheetConfig>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_SHEET_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Normalize any old name to "Points RPA"
+        if (!parsed.spreadsheetName || parsed.spreadsheetName.includes('Calcul des Points')) {
+          parsed.spreadsheetName = 'Points RPA';
+        }
+        return parsed;
+      }
     } catch {
       // ignore
     }
     return {
       spreadsheetId: '',
-      spreadsheetName: 'Classeur RPA - Calcul des Points',
+      spreadsheetName: 'Points RPA',
       membresSheetName: 'Membres',
       keysSheetName: 'Keys',
       operationsSheetName: 'Opérations',
@@ -533,7 +540,7 @@ export default function App() {
       {/* Main Content Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1 w-full space-y-6 sm:space-y-8">
         {/* Notice if Google Sheet not yet configured */}
-        {!sheetConfig.spreadsheetId && (
+        {!sheetConfig.spreadsheetId && !sheetConfig.appsScriptUrl && (
           <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-l-4 border-amber-500 rounded-r-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs bg-white">
             <div className="flex items-start gap-3">
               <div className="p-2 rounded-xl bg-amber-100 text-amber-800 shrink-0 mt-0.5">
@@ -541,11 +548,11 @@ export default function App() {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-gray-900">
-                  Liaison avec la feuille Google Sheets du projet « Calcul des points de la RPA »
+                  Liaison avec le classeur Google Sheets « Points RPA »
                 </h3>
                 <p className="text-xs text-gray-600 mt-0.5">
-                  Connectez votre classeur pour mettre à jour directement la feuille{' '}
-                  <code className="bg-gray-100 px-1 py-0.5 rounded text-emerald-800 font-semibold">Opérations</code> et lire vos membres autorisés.
+                  Renseignez l'URL de votre script Apps Script ou connectez votre classeur pour mettre à jour la feuille{' '}
+                  <code className="bg-gray-100 px-1 py-0.5 rounded text-emerald-800 font-semibold">Opérations</code> et charger vos membres.
                 </p>
               </div>
             </div>

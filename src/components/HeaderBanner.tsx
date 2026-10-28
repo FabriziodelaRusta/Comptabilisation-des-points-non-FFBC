@@ -46,25 +46,31 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
           <span className="text-emerald-200 font-medium">Module de Saisie Manuelle Points Non-FFBC</span>
         </div>
 
-        <div className="flex items-center gap-3">
-          {sheetConfig.spreadsheetId ? (
+        <div className="flex items-center gap-2.5">
+          {sheetConfig.appsScriptUrl ? (
+            <span className="text-emerald-200 bg-emerald-900/90 border border-emerald-600/70 px-2 py-0.5 rounded-lg flex items-center gap-1.5 text-[11px]">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
+              <strong className="text-white">Points RPA</strong>
+              <span className="text-emerald-300 text-[10px] hidden sm:inline">(Script gs actif)</span>
+            </span>
+          ) : sheetConfig.spreadsheetId ? (
             <a
               href={`https://docs.google.com/spreadsheets/d/${sheetConfig.spreadsheetId}/edit`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-emerald-300 hover:text-white flex items-center gap-1 text-[11px] transition-colors"
-              title="Ouvrir le classeur Google Sheets dans un nouvel onglet"
+              className="text-emerald-300 hover:text-white flex items-center gap-1 text-[11px] transition-colors bg-emerald-900/60 px-2 py-0.5 rounded-lg border border-emerald-700/60"
+              title="Ouvrir le classeur Points RPA dans un nouvel onglet"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-              <span className="underline decoration-dotted truncate max-w-[150px] sm:max-w-[200px]">
-                {sheetConfig.spreadsheetName || 'Classeur RPA'}
-              </span>
-              <ExternalLink className="w-3 h-3 opacity-70" />
+              <strong className="text-white">{sheetConfig.spreadsheetName || 'Points RPA'}</strong>
+              <ExternalLink className="w-3 h-3 opacity-70 ml-0.5" />
             </a>
           ) : (
-            <span className="text-amber-300/90 flex items-center gap-1 text-[11px]">
-              <AlertCircle className="w-3.5 h-3.5" />
-              Mode démo local (configurez votre Google Sheet)
+            <span className="text-amber-300/95 flex items-center gap-1 text-[11px] bg-amber-950/40 px-2 py-0.5 rounded-lg border border-amber-800/40">
+              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
+              <strong className="text-amber-200">Points RPA</strong>
+              <span className="text-amber-300/70 text-[10px] hidden sm:inline">(En attente URL script gs)</span>
             </span>
           )}
 

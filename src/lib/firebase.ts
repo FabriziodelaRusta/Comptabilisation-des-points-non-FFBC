@@ -9,12 +9,12 @@ import {
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase safely with fallback to prevent build-time crashes
-const safeConfig = (firebaseConfig && (firebaseConfig as any).apiKey) ? firebaseConfig : {
-  projectId: 'live-track-799f8',
-  appId: '1:483978355751:web:194ca48ac1b1557b671a02',
-  apiKey: 'AIzaSyDrIxgSisD6kxWg71klYz-RcGmDtUmHZ5o',
-  authDomain: 'live-track-799f8.firebaseapp.com',
+// Initialize Firebase safely from imported config or environment variables
+const safeConfig = {
+  projectId: firebaseConfig?.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || 'live-track-799f8',
+  appId: firebaseConfig?.appId || import.meta.env.VITE_FIREBASE_APP_ID || '',
+  apiKey: firebaseConfig?.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: firebaseConfig?.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'live-track-799f8.firebaseapp.com',
 };
 
 const app = getApps().length === 0 ? initializeApp(safeConfig) : getApp();

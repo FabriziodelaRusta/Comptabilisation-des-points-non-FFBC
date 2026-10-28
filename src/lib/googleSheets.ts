@@ -6,12 +6,27 @@ export const LOCAL_STORAGE_SAVED_OPERATIONS = 'rpa_cached_operations_v1';
 
 export const SAMPLE_APPS_SCRIPT_CODE = `// ========================================================
 // Code Google Apps Script (Code.gs) pour la WebApp RPA Points Non-FFBC
-// Copiez ce code dans Extensions > Apps Script de votre classeur RPA
+// Fichier cible : "Points RPA"
 // ========================================================
 
+function getRpaSpreadsheet() {
+  // 1. Si le script est lié au classeur (Extensions > Apps Script)
+  try {
+    var active = SpreadsheetApp.getActiveSpreadsheet();
+    if (active) return active;
+  } catch (err) {}
+
+  // 2. Si le script est un projet Apps Script autonome dans Drive
+  var files = DriveApp.getFilesByName("Points RPA");
+  if (files.hasNext()) {
+    return SpreadsheetApp.open(files.next());
+  }
+  throw new Error("Classeur 'Points RPA' introuvable dans Google Drive.");
+}
+
 function doGet(e) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const action = (e && e.parameter && e.parameter.action) || 'status';
+  var ss = getRpaSpreadsheet();
+  var action = (e && e.parameter && e.parameter.action) || 'status';
 
   if (action === 'getMembers') {
     const sheet = ss.getSheetByName('Membres');
@@ -69,8 +84,8 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const body = JSON.parse(e.postData.contents);
+    var ss = getRpaSpreadsheet();
+    var body = JSON.parse(e.postData.contents);
 
     if (body.action === 'addOperation') {
       let sheet = ss.getSheetByName('Opérations');
