@@ -1,0 +1,6 @@
+{
+  "name": "RPA - Comptabilisation Points non FFBC",
+  "description": "Application de saisie et comptabilisation des points non FFBC des membres de la RPA, synchronisée avec Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
