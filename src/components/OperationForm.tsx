@@ -6,12 +6,12 @@ import {
   Tag,
   Plus,
   Send,
-  CornerDownLeft,
   ChevronDown,
   Info,
   Pencil,
   X,
   CheckCircle,
+  RotateCcw,
 } from 'lucide-react';
 import { Member, MotifKey, OperationRecord } from '../types';
 
@@ -21,6 +21,7 @@ interface OperationFormProps {
   editingOperation?: OperationRecord | null;
   onCancelEdit?: () => void;
   onOpenNewMotifModal: () => void;
+  onOpenEditMotifModal: (motifLabel?: string) => void;
   onSubmit: (operationData: {
     dateRando: string;
     points: number;
@@ -35,6 +36,7 @@ export const OperationForm: React.FC<OperationFormProps> = ({
   editingOperation,
   onCancelEdit,
   onOpenNewMotifModal,
+  onOpenEditMotifModal,
   onSubmit,
   isLoading,
 }) => {
@@ -46,7 +48,6 @@ export const OperationForm: React.FC<OperationFormProps> = ({
     return `${y}-${m}-${d}`;
   };
 
-  // Convert DD/MM/YYYY to YYYY-MM-DD for <input type="date" />
   const parseToInputDate = (dateStr: string): string => {
     if (!dateStr) return getTodayStr();
     if (dateStr.includes('/')) {
@@ -59,39 +60,60 @@ export const OperationForm: React.FC<OperationFormProps> = ({
     return dateStr;
   };
 
-  const [dateRando, setDateRando] = useState<string>(getTodayStr());
-  const [points, setPoints] = useState<number>(3);
-  const [description, setDescription] = useState<string>('');
+  const [dateRando, setDateRando] = useState<string>(
+    editingOperation ? parseToInputDate(editingOperation.dateRando) : ''
+  );
+  const [points, setPoints] = useState<number | ''>(
+    editingOperation && typeof editingOperation.points === 'number' ? editingOperation.points : ''
+  );
+  const [description, setDescription] = useState<string>(
+    editingOperation ? editingOperation.description || '' : ''
+  );
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const pointsInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const prevMemberIdRef = useRef<string>(member.id);
 
-  // If in edit mode, populate with operation values
+  // Synchronize when editing operation changes
   useEffect(() => {
     if (editingOperation) {
       setDateRando(parseToInputDate(editingOperation.dateRando));
-      setPoints(editingOperation.points);
-      setDescription(editingOperation.description);
+      setPoints(typeof editingOperation.points === 'number' ? editingOperation.points : '');
+      setDescription(editingOperation.description || '');
+      setValidationError(null);
     } else {
-      if (motifs.length > 0 && !description) {
-        setDescription(motifs[0].label);
-        if (motifs[0].defaultPoints !== undefined) {
-          setPoints(motifs[0].defaultPoints);
-        }
-      }
+      setDateRando('');
+      setPoints('');
+      setDescription('');
+      setValidationError(null);
     }
-  }, [editingOperation, motifs]);
+  }, [editingOperation]);
 
-  // Set default description when motifs change (if not editing)
+  // When member changes, completely clear all fields
   useEffect(() => {
-    if (!editingOperation && motifs.length > 0 && !description) {
-      setDescription(motifs[0].label);
-      if (motifs[0].defaultPoints !== undefined) {
-        setPoints(motifs[0].defaultPoints);
+    if (prevMemberIdRef.current !== member.id) {
+      prevMemberIdRef.current = member.id;
+      setDateRando('');
+      setPoints('');
+      setDescription('');
+      setValidationError(null);
+      if (editingOperation && onCancelEdit) {
+        onCancelEdit();
       }
     }
-  }, [motifs, description, editingOperation]);
+  }, [member.id, editingOperation, onCancelEdit]);
+
+  // Reset all fields to blank / fresh state
+  const handleResetForm = () => {
+    setDateRando('');
+    setPoints('');
+    setDescription('');
+    setValidationError(null);
+    if (editingOperation && onCancelEdit) {
+      onCancelEdit();
+    }
+  };
 
   const handleMotifSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -116,27 +138,36 @@ export const OperationForm: React.FC<OperationFormProps> = ({
   };
 
   const toggleSign = () => {
-    setPoints((prev) => -prev);
+    if (typeof points === 'number' && points !== 0) {
+      setPoints(-points);
+    }
   };
 
   const handleFormSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setValidationError(null);
 
-    if (!description.trim()) {
-      setValidationError('Veuillez sélectionner ou renseigner une description / un motif.');
+    if (!dateRando) {
+      setValidationError('Veuillez sélectionner une date de rando dans le calendrier.');
       return;
     }
 
-    if (points === 0 || isNaN(points)) {
-      setValidationError('Le nombre de points ne peut pas être zéro.');
+    const numPoints = typeof points === 'number' ? points : Number(points);
+    if (points === '' || isNaN(numPoints) || numPoints === 0) {
+      setValidationError('Le nombre de points doit être renseigné et différent de zéro.');
+      return;
+    }
+
+    const safeDesc = (description || '').trim();
+    if (!safeDesc) {
+      setValidationError('Veuillez sélectionner une description / un motif.');
       return;
     }
 
     onSubmit({
       dateRando,
-      points,
-      description: description.trim(),
+      points: numPoints,
+      description: safeDesc,
     });
   };
 
@@ -160,31 +191,35 @@ export const OperationForm: React.FC<OperationFormProps> = ({
     >
       {/* Active Member or Edit Mode Callout */}
       <div
-        className={`rounded-xl p-3.5 border flex flex-wrap items-center justify-between gap-3 ${
+        className={`rounded-2xl p-4 border flex flex-wrap items-center justify-between gap-3 shadow-xs transition-all ${
           editingOperation
-            ? 'bg-gradient-to-r from-amber-100 to-amber-50 border-amber-300'
+            ? 'bg-gradient-to-r from-amber-100/90 via-amber-50 to-orange-50 border-amber-300 ring-2 ring-amber-300/50'
             : 'bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50/50 border-emerald-200'
         }`}
       >
         <div className="flex items-center gap-3">
           <div
-            className={`w-9 h-9 rounded-xl text-white flex items-center justify-center font-bold text-sm shadow-sm ${
+            className={`w-10 h-10 rounded-xl text-white flex items-center justify-center font-bold text-sm shadow-sm ${
               editingOperation ? 'bg-amber-600' : 'bg-emerald-700'
             }`}
           >
-            {editingOperation ? <Pencil className="w-4 h-4" /> : member.nom.charAt(0)}
+            {editingOperation ? <Pencil className="w-5 h-5" /> : member.nom.charAt(0)}
           </div>
           <div>
-            <div
-              className={`text-xs uppercase tracking-wider font-semibold ${
-                editingOperation ? 'text-amber-800' : 'text-emerald-800'
-              }`}
-            >
-              {editingOperation
-                ? `Modification de l'opération (Ligne ${editingOperation.rowNumber || 'Google Sheets'})`
-                : 'Saisie en cours pour le membre'}
+            <div className="flex items-center gap-2">
+              {editingOperation ? (
+                <div className="animate-pulse inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-amber-200 text-amber-950 border border-amber-400 shadow-2xs">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-600 animate-ping"></span>
+                  <span>Modification en cours</span>
+                </div>
+              ) : (
+                <div className="animate-pulse inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-200 text-emerald-950 border border-emerald-400 shadow-2xs">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping"></span>
+                  <span>Saisie en cours</span>
+                </div>
+              )}
             </div>
-            <div className="text-base font-bold text-gray-900">{member.nom}</div>
+            <div className="text-base font-extrabold text-gray-900 mt-1">{member.nom}</div>
           </div>
         </div>
 
@@ -193,7 +228,7 @@ export const OperationForm: React.FC<OperationFormProps> = ({
             <button
               type="button"
               onClick={onCancelEdit}
-              className="inline-flex items-center gap-1 text-xs bg-white text-gray-700 hover:text-red-700 px-3 py-1.5 rounded-lg border border-gray-300 font-semibold shadow-2xs hover:bg-red-50 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs bg-white text-gray-700 hover:text-red-700 px-3.5 py-1.5 rounded-xl border border-gray-300 font-semibold shadow-2xs hover:bg-red-50 transition-colors"
             >
               <X className="w-3.5 h-3.5" />
               <span>Annuler la modification</span>
@@ -222,18 +257,15 @@ export const OperationForm: React.FC<OperationFormProps> = ({
         </div>
       )}
 
-      {/* The 3 fields row as requested:
-          Col A: Date rando
-          Col C: Points attribués (+ ou -)
-          Col D: Descriptions (table Keys ou saisie)
-      */}
+      {/* The 3 fields row */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
-        {/* Field 1: Col A - Date Rando */}
+        {/* Field 1: Date Rando */}
         <div className="md:col-span-4 space-y-2">
           <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <CalendarIcon className="w-4 h-4 text-emerald-700" />
-              <span>Date Rando (Col A)</span>
+              <span>Date rando</span>
+              <span className="text-red-500 font-bold">*</span>
             </span>
             <span className="text-[11px] text-gray-400 font-normal">Calendrier</span>
           </label>
@@ -276,16 +308,16 @@ export const OperationForm: React.FC<OperationFormProps> = ({
           </div>
         </div>
 
-        {/* Field 2: Col C - Points attribués */}
+        {/* Field 2: Points */}
         <div className="md:col-span-3 space-y-2">
           <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1.5">
-              {points >= 0 ? (
-                <PlusCircle className="w-4 h-4 text-emerald-600" />
-              ) : (
+              {typeof points === 'number' && points < 0 ? (
                 <MinusCircle className="w-4 h-4 text-red-600" />
+              ) : (
+                <PlusCircle className="w-4 h-4 text-emerald-600" />
               )}
-              <span>Points (Col C)</span>
+              <span>Points</span>
               <span className="text-red-500 font-bold">*</span>
             </span>
             <button
@@ -302,13 +334,13 @@ export const OperationForm: React.FC<OperationFormProps> = ({
               type="button"
               onClick={toggleSign}
               className={`px-2.5 py-2.5 rounded-xl font-bold text-sm border transition-colors ${
-                points >= 0
-                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                  : 'bg-red-100 text-red-800 border-red-300'
+                typeof points === 'number' && points < 0
+                  ? 'bg-red-100 text-red-800 border-red-300'
+                  : 'bg-emerald-100 text-emerald-800 border-emerald-300'
               }`}
               title="Basculer entre points positifs et négatifs"
             >
-              {points >= 0 ? '+' : '-'}
+              {typeof points === 'number' && points < 0 ? '-' : '+'}
             </button>
             <input
               ref={pointsInputRef}
@@ -316,12 +348,15 @@ export const OperationForm: React.FC<OperationFormProps> = ({
               required
               step="1"
               value={points}
-              onChange={(e) => setPoints(Number(e.target.value))}
-              placeholder="Ex: 5 ou -2"
+              onChange={(e) => {
+                const val = e.target.value;
+                setPoints(val === '' ? '' : Number(val));
+              }}
+              placeholder="Ex: 5"
               className={`w-full px-3 py-2.5 bg-gray-50 border rounded-xl text-base font-black text-center focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-xs ${
-                points >= 0
-                  ? 'text-emerald-800 border-gray-300 focus:border-emerald-600'
-                  : 'text-red-700 border-red-300 focus:border-red-500'
+                typeof points === 'number' && points < 0
+                  ? 'text-red-700 border-red-300 focus:border-red-500'
+                  : 'text-emerald-800 border-gray-300 focus:border-emerald-600'
               }`}
             />
           </div>
@@ -356,70 +391,87 @@ export const OperationForm: React.FC<OperationFormProps> = ({
           </div>
         </div>
 
-        {/* Field 3: Col D - Descriptions (Keys table col1 = Form_Points_non_FFBC) */}
+        {/* Field 3: Descriptions with Add and Modify motif buttons */}
         <div className="md:col-span-5 space-y-2">
           <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Tag className="w-4 h-4 text-amber-600" />
-              <span>Descriptions (Col D)</span>
+              <span>Descriptions</span>
               <span className="text-red-500 font-bold">*</span>
             </span>
-            <button
-              type="button"
-              onClick={onOpenNewMotifModal}
-              className="text-emerald-700 hover:underline font-medium text-[11px]"
-            >
-              + Nouveau motif
-            </button>
-          </label>
-
-          <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <select
-                  value={description}
-                  onChange={handleMotifSelect}
-                  className="w-full appearance-none px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 pr-9 transition-colors shadow-xs"
-                >
-                  <option value="">Sélectionner un motif de la table Keys...</option>
-                  {motifs.map((m, idx) => (
-                    <option key={`${m.label}-${idx}`} value={m.label}>
-                      {m.label} {m.defaultPoints !== undefined ? `(${m.defaultPoints > 0 ? '+' : ''}${m.defaultPoints} pts)` : ''}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-
+              <button
+                type="button"
+                onClick={() => onOpenEditMotifModal(description || '')}
+                className="text-amber-700 hover:underline font-medium text-[11px] flex items-center gap-0.5"
+              >
+                <Pencil className="w-3 h-3" />
+                <span>Modifier</span>
+              </button>
+              <span className="text-gray-300">|</span>
               <button
                 type="button"
                 onClick={onOpenNewMotifModal}
-                title="Ajouter un motif dans la table Keys"
-                className="p-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-emerald-950 font-bold shadow-md hover:shadow-lg transition-all duration-150 shrink-0 border border-amber-600/40"
+                className="text-emerald-700 hover:underline font-medium text-[11px] flex items-center gap-0.5"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3 h-3" />
+                <span>Nouveau</span>
               </button>
             </div>
+          </label>
 
-            {/* Free description input (in case user wants to customize) */}
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ou saisir une description personnalisée..."
-              className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
-            />
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <select
+                value={description || ''}
+                onChange={handleMotifSelect}
+                className="w-full appearance-none px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 pr-9 transition-colors shadow-xs"
+              >
+                <option value="">Sélectionner un motif de la table Keys...</option>
+                {motifs.map((m, idx) => (
+                  <option key={`${m.label}-${idx}`} value={m.label}>
+                    {m.label} {m.defaultPoints !== undefined ? `(${m.defaultPoints > 0 ? '+' : ''}${m.defaultPoints} pts)` : ''}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {/* Modifier motif existant */}
+            <button
+              type="button"
+              onClick={() => onOpenEditMotifModal(description || '')}
+              title="Modifier le motif sélectionné"
+              className="p-2.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold shadow-xs transition-all duration-150 shrink-0 border border-amber-300"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+
+            {/* Ajouter nouveau motif */}
+            <button
+              type="button"
+              onClick={onOpenNewMotifModal}
+              title="Ajouter un nouveau motif dans la table Keys"
+              className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs transition-all duration-150 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Footer / Submit bar with Enter key indicator */}
-      <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="text-xs text-gray-500 flex items-center gap-1.5">
-          <CornerDownLeft className="w-3.5 h-3.5 text-gray-400" />
-          <span>
-            Appuyez sur <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded font-semibold text-gray-700">Entrée ↵</kbd> pour valider.
-          </span>
+      {/* Footer / Submit bar */}
+      <div className="pt-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <button
+            type="button"
+            onClick={handleResetForm}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-gray-600 hover:text-gray-900 hover:bg-gray-100 text-xs font-semibold transition-colors border border-gray-200 shadow-2xs"
+            title="Vider les champs pour repartir sur une saisie vierge"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
+            <span>Vider la saisie</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
@@ -435,7 +487,14 @@ export const OperationForm: React.FC<OperationFormProps> = ({
 
           <button
             type="submit"
-            disabled={isLoading || !description.trim()}
+            disabled={
+              isLoading ||
+              !(description || '').trim() ||
+              points === '' ||
+              points === 0 ||
+              isNaN(Number(points)) ||
+              !dateRando
+            }
             className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
               editingOperation
                 ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800'
@@ -443,10 +502,7 @@ export const OperationForm: React.FC<OperationFormProps> = ({
             }`}
           >
             {editingOperation ? <CheckCircle className="w-4 h-4" /> : <Send className="w-4 h-4" />}
-            <span>{editingOperation ? 'Mettre à jour l\'opération' : 'Valider et Enregistrer l\'Opération'}</span>
-            <span className="text-[10px] bg-black/20 px-1.5 py-0.5 rounded font-mono">
-              ↵ Enter
-            </span>
+            <span>{editingOperation ? "Mettre à jour l'opération" : "Valider et Enregistrer l'Opération"}</span>
           </button>
         </div>
       </div>

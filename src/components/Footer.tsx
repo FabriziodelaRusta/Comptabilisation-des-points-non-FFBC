@@ -11,7 +11,7 @@ export const Footer: React.FC<FooterProps> = ({ sheetConfig, onOpenSettings }) =
   return (
     <footer className="bg-emerald-950 text-emerald-300/80 border-t-2 border-amber-500/80 text-xs mt-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Col 1: RPA Club */}
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -27,29 +27,7 @@ export const Footer: React.FC<FooterProps> = ({ sheetConfig, onOpenSettings }) =
             </p>
           </div>
 
-          {/* Col 2: Google Sheets Links & Sheets structure */}
-          <div>
-            <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-              <span>Structure Google Sheets</span>
-            </h4>
-            <ul className="space-y-1 text-xs">
-              <li className="flex items-center gap-2">
-                <span className="text-amber-400 font-mono">•</span>
-                <span><strong>Membres :</strong> Filtre <code>Afficher MAJ Manuelle = VRAI</code></span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-amber-400 font-mono">•</span>
-                <span><strong>Keys :</strong> Motifs sous <code>Form_Points_non_FFBC</code></span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-amber-400 font-mono">•</span>
-                <span><strong>Opérations :</strong> Horodatage <code>jj/mm/AAAA HH:MM:SS</code></span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Col 3: Status & Configuration */}
+          {/* Col 2: Status & Configuration */}
           <div>
             <h4 className="font-bold text-white text-xs uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />

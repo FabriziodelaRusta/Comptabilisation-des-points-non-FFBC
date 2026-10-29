@@ -14,6 +14,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Users,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Sparkles,
 } from 'lucide-react';
 import { OperationRecord, Member } from '../types';
 import { parseOperationDateTime } from '../lib/googleSheets';
@@ -26,7 +30,11 @@ interface RecentOperationsListProps {
   onEditOperation: (op: OperationRecord) => void;
   onDeleteOperation: (op: OperationRecord) => void;
   onSelectMemberFilter?: (nom: string) => void;
+  onLoadDemoData?: () => void;
 }
+
+type SortField = 'dateRando' | 'membre' | 'description' | 'dateOperation';
+type SortDirection = 'asc' | 'desc';
 
 export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
   operations,
@@ -36,8 +44,32 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
   onEditOperation,
   onDeleteOperation,
   onSelectMemberFilter,
+  onLoadDemoData,
 }) => {
   const [filterText, setFilterText] = useState('');
+  const [sortField, setSortField] = useState<SortField>('dateOperation');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  // Toggle sort order
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection(field === 'dateOperation' ? 'desc' : 'asc');
+    }
+  };
+
+  // Helper to parse DD/MM/YYYY into timestamp
+  const parseDateOnly = (str: string): number => {
+    if (!str) return 0;
+    const parts = str.trim().split('/');
+    if (parts.length === 3) {
+      const [d, m, y] = parts.map(Number);
+      return new Date(y, m - 1, d).getTime();
+    }
+    return new Date(str).getTime() || 0;
+  };
 
   // 1. Filter by selected member (unless "Tous" or null)
   const isAllSelected = !selectedMember || selectedMember.nom === 'Tous';
@@ -45,29 +77,55 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
   const memberFiltered = isAllSelected
     ? operations
     : operations.filter(
-        (op) => op.membre.trim().toLowerCase() === selectedMember.nom.trim().toLowerCase()
+        (op) => (op.membre || '').trim().toLowerCase() === (selectedMember?.nom || '').trim().toLowerCase()
       );
 
   // 2. Filter by search input
   const searchFiltered = memberFiltered.filter((op) => {
     const q = filterText.toLowerCase();
+    const membreStr = (op.membre || '').toLowerCase();
+    const descStr = (op.description || '').toLowerCase();
+    const dateRandoStr = op.dateRando || '';
+    const dateOpStr = op.dateOperation || '';
+    const mailStr = (op.mail || '').toLowerCase();
     return (
-      op.membre.toLowerCase().includes(q) ||
-      op.description.toLowerCase().includes(q) ||
-      op.dateRando.includes(q) ||
-      op.dateOperation.includes(q) ||
-      (op.mail && op.mail.toLowerCase().includes(q))
+      membreStr.includes(q) ||
+      descStr.includes(q) ||
+      dateRandoStr.includes(q) ||
+      dateOpStr.includes(q) ||
+      mailStr.includes(q)
     );
   });
 
-  // 3. Tri descendant date heure operations (Col G)
-  const sortedOperations = [...searchFiltered].sort(
-    (a, b) => parseOperationDateTime(b.dateOperation) - parseOperationDateTime(a.dateOperation)
-  );
+  // 3. Dynamic sorting based on sortField and sortDirection
+  const sortedOperations = [...searchFiltered].sort((a, b) => {
+    let cmp = 0;
+    if (sortField === 'dateOperation') {
+      cmp = parseOperationDateTime(a.dateOperation) - parseOperationDateTime(b.dateOperation);
+    } else if (sortField === 'dateRando') {
+      cmp = parseDateOnly(a.dateRando) - parseDateOnly(b.dateRando);
+    } else if (sortField === 'membre') {
+      cmp = (a.membre || '').localeCompare(b.membre || '', 'fr', { sensitivity: 'base' });
+    } else if (sortField === 'description') {
+      cmp = (a.description || '').localeCompare(b.description || '', 'fr', { sensitivity: 'base' });
+    }
+    return sortDirection === 'asc' ? cmp : -cmp;
+  });
 
-  // Summary statistics
+  // Summary statistics - Solde des points
   const totalPoints = memberFiltered.reduce((sum, op) => sum + op.points, 0);
   const positiveCount = memberFiltered.filter((op) => op.points > 0).length;
+
+  const renderSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 ml-1 inline" />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp className="w-3.5 h-3.5 text-emerald-700 ml-1 inline" />
+    ) : (
+      <ArrowDown className="w-3.5 h-3.5 text-emerald-700 ml-1 inline" />
+    );
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -85,7 +143,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
             <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
               <span>
                 {isAllSelected
-                  ? 'Toutes les opérations (Feuille Opérations)'
+                  ? 'Toutes les opérations'
                   : `Opérations de : ${selectedMember?.nom}`}
               </span>
               <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
@@ -93,7 +151,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
               </span>
             </h2>
             <p className="text-xs text-gray-500">
-              Tri descendant par date et heure d'insertion (Col G) • Colonnes A à G
+              Historique des attributions de points • Cliquez sur les colonnes pour trier
             </p>
           </div>
         </div>
@@ -111,10 +169,10 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
         </div>
       </div>
 
-      {/* Summary Chips */}
+      {/* Summary Chips - Solde des points */}
       <div className="px-5 py-2.5 bg-emerald-50/50 border-b border-emerald-100 flex flex-wrap items-center gap-4 text-xs">
         <div className="text-gray-700">
-          <span className="text-gray-500">Total points {isAllSelected ? 'global' : 'du membre'} :</span>{' '}
+          <span className="text-gray-500">Solde des points :</span>{' '}
           <strong className="text-emerald-800 font-extrabold text-sm ml-1">
             {totalPoints > 0 ? `+${totalPoints}` : totalPoints} pts
           </strong>
@@ -125,9 +183,9 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
           <strong className="text-gray-800 font-semibold">{positiveCount}</strong>
         </div>
         <div className="text-gray-400">•</div>
-        <div className="text-gray-700 flex items-center gap-1">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Colonnes : Date rando, Nom, Points, Description, Mail, Date opération</span>
+        <div className="text-gray-700">
+          <span className="text-gray-500">Total opérations :</span>{' '}
+          <strong className="text-gray-800 font-semibold">{memberFiltered.length}</strong>
         </div>
       </div>
 
@@ -137,13 +195,64 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
           <table className="w-full text-left text-xs divide-y divide-gray-100">
             <thead className="bg-gray-50 text-gray-600 font-bold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="px-3.5 py-3">Date Rando (Col A)</th>
-                <th className="px-3.5 py-3">Nom Membre (Col B)</th>
-                <th className="px-3.5 py-3 text-center">Points (Col C)</th>
-                <th className="px-3.5 py-3">Descriptions (Col D)</th>
-                <th className="px-3.5 py-3">Mail Utilisateur (Col F)</th>
-                <th className="px-3.5 py-3">Date Opération (Col G)</th>
-                <th className="px-3.5 py-3 text-right">Actions</th>
+                {/* 1. Date Rando with sort */}
+                <th
+                  onClick={() => handleSort('dateRando')}
+                  className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Date rando</span>
+                    {renderSortIcon('dateRando')}
+                  </div>
+                </th>
+
+                {/* 2. Nom Membre with sort */}
+                <th
+                  onClick={() => handleSort('membre')}
+                  className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Nom membre</span>
+                    {renderSortIcon('membre')}
+                  </div>
+                </th>
+
+                {/* 3. Points */}
+                <th className="px-3.5 py-3 text-center">
+                  <span>Points</span>
+                </th>
+
+                {/* 4. Description with sort */}
+                <th
+                  onClick={() => handleSort('description')}
+                  className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Descriptions</span>
+                    {renderSortIcon('description')}
+                  </div>
+                </th>
+
+                {/* 5. Mail Utilisateur */}
+                <th className="px-3.5 py-3">
+                  <span>Mail utilisateur</span>
+                </th>
+
+                {/* 6. Date Opération with sort */}
+                <th
+                  onClick={() => handleSort('dateOperation')}
+                  className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Date opération</span>
+                    {renderSortIcon('dateOperation')}
+                  </div>
+                </th>
+
+                {/* 7. Actions */}
+                <th className="px-3.5 py-3 text-right">
+                  <span>Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 bg-white">
@@ -151,7 +260,6 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                 const isPos = op.points >= 0;
                 return (
                   <tr key={op.id} className="hover:bg-emerald-50/30 transition-colors group">
-                    {/* Col A: Date rando */}
                     <td className="px-3.5 py-3 text-gray-800 font-medium whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-gray-400" />
@@ -159,7 +267,6 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                       </div>
                     </td>
 
-                    {/* Col B: Nom membre */}
                     <td className="px-3.5 py-3">
                       <button
                         type="button"
@@ -171,7 +278,6 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                       </button>
                     </td>
 
-                    {/* Col C: Points */}
                     <td className="px-3.5 py-3 text-center">
                       <span
                         className={`inline-block font-black px-2 py-0.5 rounded-md text-xs ${
@@ -184,12 +290,10 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                       </span>
                     </td>
 
-                    {/* Col D: Description */}
                     <td className="px-3.5 py-3 text-gray-800 font-medium max-w-xs truncate">
                       {op.description}
                     </td>
 
-                    {/* Col F: Mail utilisateur */}
                     <td className="px-3.5 py-3 text-gray-500 text-[11px] font-mono whitespace-nowrap">
                       {op.mail ? (
                         <div className="flex items-center gap-1">
@@ -203,7 +307,6 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                       )}
                     </td>
 
-                    {/* Col G: Date opérations d'insertion */}
                     <td className="px-3.5 py-3 font-mono text-[11px] text-gray-600 whitespace-nowrap">
                       <div className="flex items-center gap-1">
                         <Clock className="w-3 h-3 text-gray-400" />
@@ -211,10 +314,8 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                       </div>
                     </td>
 
-                    {/* Actions: Crayon (Modifier) et Poubelle (Supprimer) */}
                     <td className="px-3.5 py-3 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
-                        {/* Crayon pour recharger et permettre la modif */}
                         <button
                           type="button"
                           onClick={() => onEditOperation(op)}
@@ -224,7 +325,6 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Poubelle pour effacer */}
                         <button
                           type="button"
                           onClick={() => onDeleteOperation(op)}
@@ -241,7 +341,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
             </tbody>
           </table>
         ) : (
-          <div className="p-8 text-center text-gray-500 text-xs space-y-2">
+          <div className="p-8 text-center text-gray-500 text-xs space-y-3">
             <AlertCircle className="w-6 h-6 text-gray-300 mx-auto" />
             {filterText ? (
               <p>Aucune opération ne correspond à votre recherche « {filterText} ».</p>
@@ -250,7 +350,19 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                 Aucune opération enregistrée pour le membre <strong>{selectedMember.nom}</strong>. Utilisez le formulaire ci-dessus pour lui attribuer des points.
               </p>
             ) : (
-              <p>Aucune opération trouvée dans la feuille Opérations.</p>
+              <div className="space-y-2">
+                <p>Aucune opération trouvée dans la feuille Opérations.</p>
+                {onLoadDemoData && (
+                  <button
+                    type="button"
+                    onClick={onLoadDemoData}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg font-semibold text-xs border border-emerald-200 transition-colors"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Charger des données de test (Démo locale)</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

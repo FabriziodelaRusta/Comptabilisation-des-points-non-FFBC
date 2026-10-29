@@ -105,7 +105,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             <div className="flex items-center justify-between py-1 border-b border-gray-200/60 text-sm">
               <span className="text-gray-500 flex items-center gap-2">
                 <User className="w-4 h-4 text-emerald-700" />
-                Membre (Col B)
+                Membre
               </span>
               <span className="font-bold text-gray-900">{memberName}</span>
             </div>
@@ -118,7 +118,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                 ) : (
                   <MinusCircle className="w-4 h-4 text-red-600" />
                 )}
-                Points attribués (Col C)
+                Points attribués
               </span>
               <span
                 className={`font-black text-base px-2.5 py-0.5 rounded-lg ${
@@ -133,7 +133,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             <div className="flex items-start justify-between py-1 border-b border-gray-200/60 text-sm">
               <span className="text-gray-500 flex items-center gap-2 shrink-0">
                 <Tag className="w-4 h-4 text-amber-600" />
-                Description (Col D)
+                Description
               </span>
               <span className="font-semibold text-gray-800 text-right ml-4">{description}</span>
             </div>
@@ -142,7 +142,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             <div className="flex items-center justify-between py-1 border-b border-gray-200/60 text-sm">
               <span className="text-gray-500 flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-blue-600" />
-                Date Rando (Col A)
+                Date Rando
               </span>
               <span className="font-medium text-gray-800">{dateRando}</span>
             </div>
@@ -151,7 +151,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             <div className="flex items-center justify-between py-1 text-xs">
               <span className="text-gray-400 flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5" />
-                Date Opération (Col G)
+                Date Opération
               </span>
               <span className="font-mono text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
                 {dateOperation}

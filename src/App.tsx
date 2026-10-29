@@ -46,6 +46,7 @@ import {
   deleteOperationInSheet,
   addMemberToSheet,
   addMotifToSheet,
+  updateMotifInSheet,
   fetchFromAppsScript,
   postToAppsScript,
   parseOperationDateTime,
@@ -55,6 +56,7 @@ import { MemberSelector, ALL_MEMBERS_OPTION } from './components/MemberSelector'
 import { OperationForm } from './components/OperationForm';
 import { NewMemberModal } from './components/NewMemberModal';
 import { NewMotifModal } from './components/NewMotifModal';
+import { EditMotifModal } from './components/EditMotifModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { RecentOperationsList } from './components/RecentOperationsList';
 import { SpreadsheetSettingsModal } from './components/SpreadsheetSettingsModal';
@@ -99,7 +101,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    return DEFAULT_OPERATIONS;
+    return []; // À l'ouverture ne pas afficher de données démo
   });
 
   // Active selections
@@ -115,6 +117,8 @@ export default function App() {
   const [isNewMemberModalOpen, setIsNewMemberModalOpen] = useState<boolean>(false);
   const [newMemberInitialName, setNewMemberInitialName] = useState<string>('');
   const [isNewMotifModalOpen, setIsNewMotifModalOpen] = useState<boolean>(false);
+  const [isEditMotifModalOpen, setIsEditMotifModalOpen] = useState<boolean>(false);
+  const [currentMotifToEdit, setCurrentMotifToEdit] = useState<MotifKey | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
 
   // Confirmation Modal state for Workspace mutating operations
@@ -214,13 +218,13 @@ export default function App() {
               .map((op: any, i: number) => ({
                 id: `op-as-${i}`,
                 rowNumber: op.rowNumber,
-                dateRando: op.dateRando,
-                membre: op.membre,
+                dateRando: String(op.dateRando || ''),
+                membre: String(op.membre || ''),
                 points: Number(op.points) || 0,
-                description: op.description,
+                description: String(op.description || ''),
                 colE: '',
-                mail: op.mail,
-                dateOperation: op.dateOperation,
+                mail: String(op.mail || ''),
+                dateOperation: String(op.dateOperation || ''),
                 syncedToGoogleSheets: true,
               }))
               .sort(
@@ -396,6 +400,70 @@ export default function App() {
       showToast(`Motif « ${label} » ajouté sous Form_Points_non_FFBC !`, 'success');
     } catch (err: any) {
       showToast(err?.message || 'Erreur lors de l\'ajout du motif.', 'error');
+      throw err;
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Open Edit Motif modal
+  const handleOpenEditMotif = (motifLabel?: string) => {
+    let target = motifs.find(
+      (m) => (m.label || '').trim().toLowerCase() === (motifLabel || '').trim().toLowerCase()
+    );
+    if (!target && motifs.length > 0) {
+      target = motifs[0];
+    }
+    if (!target) {
+      target = {
+        key: 'Form_Points_non_FFBC',
+        label: motifLabel || 'Nouveau motif',
+        defaultPoints: 3,
+      };
+    }
+    setCurrentMotifToEdit(target);
+    setIsEditMotifModalOpen(true);
+  };
+
+  // Update Motif handler (Apps Script, Google Sheets, or Local)
+  const handleUpdateMotif = async (oldLabel: string, newLabel: string, defaultPoints?: number) => {
+    setActionLoading(true);
+    try {
+      if (sheetConfig.appsScriptUrl) {
+        await postToAppsScript(sheetConfig.appsScriptUrl, {
+          action: 'updateMotif',
+          oldLabel,
+          newLabel,
+          points: defaultPoints,
+        });
+      } else if (isGoogleConnected && sheetConfig.spreadsheetId) {
+        await updateMotifInSheet(
+          sheetConfig.spreadsheetId,
+          sheetConfig.keysSheetName,
+          oldLabel,
+          newLabel,
+          defaultPoints
+        );
+      }
+
+      // Update in motifs state
+      setMotifs((prev) =>
+        prev.map((m) =>
+          m.label === oldLabel
+            ? { ...m, label: newLabel, defaultPoints: defaultPoints !== undefined ? defaultPoints : m.defaultPoints }
+            : m
+        )
+      );
+
+      // Update in local operations list if matches
+      setOperations((prev) =>
+        prev.map((op) => (op.description === oldLabel ? { ...op, description: newLabel } : op))
+      );
+
+      showToast(`Motif « ${newLabel} » modifié avec succès !`, 'success');
+    } catch (err: any) {
+      console.error('Erreur mise à jour motif:', err);
+      showToast(err?.message || 'Erreur lors de la modification du motif.', 'error');
       throw err;
     } finally {
       setActionLoading(false);
@@ -714,21 +782,17 @@ export default function App() {
 
         {/* Section: Saisie Workflow */}
         <section className="bg-white rounded-3xl border border-gray-200/90 shadow-sm p-6 sm:p-8 space-y-6">
-          <div className="border-b border-gray-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <span className="text-[11px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                {isAllMembersSelected ? 'Consultation Globale' : 'Saisie & Gestion'}
+          <div className="border-b border-gray-100 pb-4">
+            {isAllMembersSelected && (
+              <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 inline-block mb-1">
+                Consultation Globale
               </span>
-              <h2 className="text-lg sm:text-xl font-extrabold text-gray-900 mt-1">
-                {isAllMembersSelected
-                  ? 'Historique Global des Points Non-FFBC'
-                  : 'Saisie d\'une Opération de Points Non-FFBC'}
-              </h2>
-            </div>
-            <div className="text-xs text-gray-500 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>Colonnes : A=Date Rando, B=Nom, C=Points, D=Descriptions, F=Mail, G=Date Opération</span>
-            </div>
+            )}
+            <h2 className="text-lg sm:text-xl font-extrabold text-gray-900">
+              {isAllMembersSelected
+                ? 'Historique Global des Points Non-FFBC'
+                : 'Saisie d\'une Opération de Points Non-FFBC'}
+            </h2>
           </div>
 
           {/* Member Selector with Search, Pencil icon, and 'Tous' pseudo-member */}
@@ -738,9 +802,7 @@ export default function App() {
               selectedMember={selectedMember}
               onSelectMember={(mem) => {
                 setSelectedMember(mem);
-                if (editingOperation && mem?.nom !== editingOperation.membre) {
-                  setEditingOperation(null);
-                }
+                setEditingOperation(null);
               }}
               onOpenNewMemberModal={(initialName) => {
                 setNewMemberInitialName(initialName || '');
@@ -769,11 +831,13 @@ export default function App() {
             /* Specific member selected: display the 3 fields underneath */
             <div className="pt-2 animate-in fade-in duration-200">
               <OperationForm
+                key={`${selectedMember.id}-${editingOperation ? editingOperation.id : 'create'}`}
                 member={selectedMember}
                 motifs={motifs}
                 editingOperation={editingOperation}
                 onCancelEdit={() => setEditingOperation(null)}
                 onOpenNewMotifModal={() => setIsNewMotifModalOpen(true)}
+                onOpenEditMotifModal={handleOpenEditMotif}
                 onSubmit={handleFormSubmit}
                 isLoading={actionLoading}
               />
@@ -811,6 +875,7 @@ export default function App() {
                 window.scrollTo({ top: 120, behavior: 'smooth' });
               }
             }}
+            onLoadDemoData={handleLoadDemoData}
           />
         </section>
       </main>
@@ -828,6 +893,14 @@ export default function App() {
         isOpen={isNewMotifModalOpen}
         onClose={() => setIsNewMotifModalOpen(false)}
         onSubmit={handleAddMotif}
+        isLoading={actionLoading}
+      />
+
+      <EditMotifModal
+        isOpen={isEditMotifModalOpen}
+        currentMotif={currentMotifToEdit}
+        onClose={() => setIsEditMotifModalOpen(false)}
+        onSubmit={handleUpdateMotif}
         isLoading={actionLoading}
       />
 

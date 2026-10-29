@@ -72,7 +72,7 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
       <label className="block text-sm font-bold text-gray-800 mb-1.5 flex items-center justify-between">
         <span className="flex items-center gap-1.5">
           <User className="w-4 h-4 text-emerald-700" />
-          <span>Sélectionner le Membre RPA</span>
+          <span>Sélectionner le membre ou le bénévole RPA</span>
           <span className="text-red-500 font-bold">*</span>
         </span>
         <span className="text-xs text-emerald-700 font-normal bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">

@@ -179,6 +179,24 @@ function doPost(e) {
       return jsonResponse({ success: true });
     }
 
+    // 9. Modifier un motif existant dans la table Keys
+    if (body.action === 'updateMotif') {
+      var sheet = ss.getSheetByName('Keys');
+      if (sheet) {
+        var data = sheet.getDataRange().getValues();
+        for (var i = 1; i < data.length; i++) {
+          if (data[i][1] === body.oldLabel) {
+            sheet.getRange(i + 1, 2).setValue(body.newLabel);
+            if (body.points !== undefined && body.points !== '') {
+              sheet.getRange(i + 1, 3).setValue(body.points);
+            }
+            return jsonResponse({ success: true });
+          }
+        }
+      }
+      return jsonResponse({ success: true });
+    }
+
     return jsonResponse({ success: false, error: 'Action inconnue' });
   } catch (err) {
     return jsonResponse({ success: false, error: err.toString() });
@@ -805,6 +823,69 @@ export async function addMotifToSheet(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error?.message || 'Erreur lors de l\'ajout du motif dans Google Sheets.');
+  }
+
+  return true;
+}
+
+/**
+ * Update a motif in 'Keys' sheet under Form_Points_non_FFBC
+ */
+export async function updateMotifInSheet(
+  spreadsheetId: string,
+  sheetName: string = 'Keys',
+  oldLabel: string,
+  newLabel: string,
+  defaultPoints?: number
+): Promise<boolean> {
+  const token = await getAccessToken();
+  if (!token) throw new Error('Non authentifié.');
+
+  // 1. Fetch current motifs to locate row
+  const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    `${sheetName}!A:C`
+  )}`;
+  const getRes = await fetch(getUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!getRes.ok) throw new Error('Impossible de lire les motifs pour la mise à jour.');
+  const data = await getRes.json();
+  const rows = data.values || [];
+
+  let targetRowIndex = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i] && rows[i][1] === oldLabel) {
+      targetRowIndex = i + 1; // 1-indexed
+      break;
+    }
+  }
+
+  if (targetRowIndex === -1) {
+    // If not found, append it
+    return addMotifToSheet(spreadsheetId, sheetName, newLabel, defaultPoints);
+  }
+
+  const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    `${sheetName}!B${targetRowIndex}:C${targetRowIndex}`
+  )}?valueInputOption=USER_ENTERED`;
+
+  const bodyData = {
+    values: [[newLabel, defaultPoints !== undefined ? defaultPoints : '']],
+  };
+
+  const res = await fetch(updateUrl, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(bodyData),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || 'Erreur lors de la modification du motif dans Google Sheets.');
   }
 
   return true;
