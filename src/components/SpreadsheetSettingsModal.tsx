@@ -41,9 +41,11 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
   isGoogleConnected,
   onSignIn,
 }) => {
-  const [activeTab, setActiveTab] = useState<'oauth' | 'apps_script'>('oauth');
+  const DEFAULT_APPS_SCRIPT_URL =
+    'https://script.google.com/macros/s/AKfycbxmzlZgSplShtZX_TkmrOKvC-R0Jvy5nAlS0tQgTYkKvprfXckTUJKt--aTgIjzdxeE/exec';
+  const [activeTab, setActiveTab] = useState<'oauth' | 'apps_script'>('apps_script');
   const [sheetInput, setSheetInput] = useState(config.spreadsheetId || '');
-  const [appsScriptUrl, setAppsScriptUrl] = useState(config.appsScriptUrl || '');
+  const [appsScriptUrl, setAppsScriptUrl] = useState(config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL);
   const [membresSheetName, setMembresSheetName] = useState(config.membresSheetName || 'Membres');
   const [keysSheetName, setKeysSheetName] = useState(config.keysSheetName || 'Keys');
   const [operationsSheetName, setOperationsSheetName] = useState(config.operationsSheetName || 'Opérations');

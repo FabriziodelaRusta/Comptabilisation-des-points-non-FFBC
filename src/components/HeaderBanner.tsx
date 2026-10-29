@@ -37,19 +37,14 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
     <header className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 text-white shadow-xl border-b-4 border-amber-500">
       {/* Top subtle notification / utility bar */}
       <div className="bg-emerald-950/70 px-4 py-1.5 text-xs border-b border-emerald-700/40 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-emerald-200">
-          <span className="inline-flex items-center justify-center bg-amber-500 text-emerald-950 font-bold px-1.5 py-0.5 rounded text-[10px] tracking-wide">
-            RPA CLUB
-          </span>
-          <span className="hidden sm:inline">Randonneurs Pédestres & Cyclotouristes Athois</span>
-          <span className="text-emerald-400/60">•</span>
-          <span className="text-emerald-200 font-medium">Module de Saisie Manuelle Points Non-FFBC</span>
+        <div className="flex items-center gap-2 text-emerald-300 text-[11px]">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Connexion directe Google Apps Script (Méthode B)</span>
         </div>
 
         <div className="flex items-center gap-2.5">
           {sheetConfig.appsScriptUrl ? (
             <span className="text-emerald-200 bg-emerald-900/90 border border-emerald-600/70 px-2 py-0.5 rounded-lg flex items-center gap-1.5 text-[11px]">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
               <strong className="text-white">Points RPA</strong>
               <span className="text-emerald-300 text-[10px] hidden sm:inline">(Script gs actif)</span>
@@ -111,11 +106,11 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
                   <span>Comptabilisation des Points Non FFBC</span>
                 </h1>
                 <span className="bg-emerald-700/80 text-emerald-200 text-xs px-2 py-0.5 rounded-full font-medium border border-emerald-600/60">
-                  v2.3 Sync
+                  v2.4 Méthode B
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-emerald-200/90 mt-0.5">
-                Mise à jour en direct de la feuille <strong className="text-amber-300">Opérations</strong> pour les membres autorisés (<span className="italic">Afficher MAJ Manuelle</span>)
+              <p className="text-xs sm:text-sm text-emerald-100/95 mt-1 max-w-3xl leading-relaxed">
+                Comptabilisation spécifique des activités non répertoriées par la FFBC : bénévolat, balisage et fléchage des brevets, ravitaillements, tenue de la permanence club et manifestations sportives.
               </p>
             </div>
           </div>

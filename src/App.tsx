@@ -62,20 +62,27 @@ import { RecentOperationsList } from './components/RecentOperationsList';
 import { SpreadsheetSettingsModal } from './components/SpreadsheetSettingsModal';
 import { Footer } from './components/Footer';
 
+const DEFAULT_APPS_SCRIPT_URL =
+  'https://script.google.com/macros/s/AKfycbxmzlZgSplShtZX_TkmrOKvC-R0Jvy5nAlS0tQgTYkKvprfXckTUJKt--aTgIjzdxeE/exec';
+
 export default function App() {
   // Authentication state
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(false);
 
-  // Spreadsheet configuration state
+  // Spreadsheet configuration state (Méthode B active par défaut)
   const [sheetConfig, setSheetConfig] = useState<SheetConfig>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_SHEET_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        if (!parsed.appsScriptUrl || parsed.appsScriptUrl.trim() === '') {
+          parsed.appsScriptUrl = DEFAULT_APPS_SCRIPT_URL;
+        }
         if (!parsed.spreadsheetName || parsed.spreadsheetName.includes('Calcul des Points')) {
           parsed.spreadsheetName = 'Points RPA';
         }
+        parsed.syncMode = 'apps_script';
         return parsed;
       }
     } catch {
@@ -87,22 +94,16 @@ export default function App() {
       membresSheetName: 'Membres',
       keysSheetName: 'Keys',
       operationsSheetName: 'Opérations',
-      isCustomConfigured: false,
+      isCustomConfigured: true,
+      appsScriptUrl: DEFAULT_APPS_SCRIPT_URL,
+      syncMode: 'apps_script',
     };
   });
 
-  // App data state
-  const [members, setMembers] = useState<Member[]>(DEFAULT_MEMBERS);
-  const [motifs, setMotifs] = useState<MotifKey[]>(DEFAULT_MOTIFS);
-  const [operations, setOperations] = useState<OperationRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_SAVED_OPERATIONS);
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return []; // À l'ouverture ne pas afficher de données démo
-  });
+  // App data state - Aucune donnée de démo, seules les vraies données de la feuille sont affichées
+  const [members, setMembers] = useState<Member[]>([]);
+  const [motifs, setMotifs] = useState<MotifKey[]>([]);
+  const [operations, setOperations] = useState<OperationRecord[]>([]);
 
   // Active selections
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -195,7 +196,7 @@ export default function App() {
       try {
         setIsLoadingMembers(true);
         const membersRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getMembers');
-        if (membersRes?.success && Array.isArray(membersRes.members) && membersRes.members.length > 0) {
+        if (membersRes?.success && Array.isArray(membersRes.members)) {
           setMembers(
             membersRes.members.map((m: any, i: number) => ({
               id: `mem-as-${i}`,
@@ -207,7 +208,7 @@ export default function App() {
         }
 
         const keysRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getKeys');
-        if (keysRes?.success && Array.isArray(keysRes.motifs) && keysRes.motifs.length > 0) {
+        if (keysRes?.success && Array.isArray(keysRes.motifs)) {
           setMotifs(keysRes.motifs);
         }
 
@@ -223,6 +224,7 @@ export default function App() {
                 points: Number(op.points) || 0,
                 description: String(op.description || ''),
                 colE: '',
+                source: String(op.source || 'WebApp RPA'),
                 mail: String(op.mail || ''),
                 dateOperation: String(op.dateOperation || ''),
                 syncedToGoogleSheets: true,
@@ -482,7 +484,7 @@ export default function App() {
     }
 
     const currentTimestamp = formatBelgianDateTime(new Date());
-    const userMail = currentUser?.email || 'secretaire@rpa.be';
+    const userMail = currentUser?.email || 'mezitineraires@gmail.com';
 
     if (editingOperation) {
       // Update action
@@ -592,6 +594,7 @@ export default function App() {
           points: op.points,
           description: op.description,
           colE: '',
+          source: 'WebApp RPA',
           mail: op.mail,
           dateOperation: op.dateOperation,
           syncedToGoogleSheets: synced,
@@ -701,15 +704,8 @@ export default function App() {
   };
 
   const handleLoadDemoData = () => {
-    setMembers(DEFAULT_MEMBERS);
-    setMotifs(DEFAULT_MOTIFS);
-    setOperations(DEFAULT_OPERATIONS);
-    setSheetConfig((prev) => ({
-      ...prev,
-      spreadsheetId: '',
-      isCustomConfigured: false,
-    }));
-    showToast('Données de démonstration RPA rechargées.', 'info');
+    loadDataFromGoogleSheets();
+    showToast('Actualisation des données depuis la feuille Points RPA...', 'info');
   };
 
   const isAllMembersSelected = selectedMember?.nom === 'Tous';

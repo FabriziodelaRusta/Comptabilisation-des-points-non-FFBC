@@ -79,7 +79,7 @@ function doGet(e) {
     return jsonResponse({ success: true, motifs: motifs });
   }
 
-  // 3. Lire les opérations (Colonnes A à G)
+  // 3. Lire les opérations (Colonnes A à H)
   if (action === 'getOperations') {
     var sheet = ss.getSheetByName('Opérations');
     if (!sheet) return jsonResponse({ success: true, operations: [] });
@@ -88,6 +88,12 @@ function doGet(e) {
     for (var k = 1; k < data.length; k++) {
       var r = data[k];
       if (!r || r.length === 0 || (!r[0] && !r[1])) continue;
+      // Prise en charge du schéma 8 colonnes (A à H) et rétrocompatibilité 7 colonnes
+      var hasColH = r.length >= 8 && r[7] !== undefined && String(r[7]).trim() !== '';
+      var mailVal = hasColH ? String(r[6] || '') : String(r[5] || '');
+      var dateOpVal = hasColH ? String(r[7] || '') : String(r[6] || r[0] || '');
+      var sourceVal = hasColH ? String(r[5] || 'WebApp RPA') : 'WebApp RPA';
+
       operations.push({
         rowNumber: k + 1,
         dateRando: String(r[0] || ''),
@@ -95,8 +101,9 @@ function doGet(e) {
         points: Number(r[2]) || 0,
         description: String(r[3] || ''),
         colE: '',
-        mail: String(r[5] || ''),
-        dateOperation: String(r[6] || '')
+        source: sourceVal,
+        mail: mailVal,
+        dateOperation: dateOpVal
       });
     }
     return jsonResponse({ success: true, operations: operations });
@@ -110,43 +117,48 @@ function doPost(e) {
     var ss = getRpaSpreadsheet();
     var body = JSON.parse(e.postData.contents);
 
-    // 4. Insérer une opération dans la feuille Opérations (Colonnes A à G)
+    // 4. Insérer une opération dans la feuille Opérations (Colonnes A à H)
+    // Col A = Date rando, Col B = Nom membre, Col C = Points, Col D = Description ou motif
+    // Col E = (vide), Col F = "WebApp RPA", Col G = Mail connexion, Col H = Date opération
     if (body.action === 'addOperation') {
       var sheet = ss.getSheetByName('Opérations');
       if (!sheet) {
         sheet = ss.insertSheet('Opérations');
         sheet.appendRow([
           'Date rando',
-          'Nom membre',
-          'Points attribué',
-          'Descriptions',
+          'Nom du membre',
+          'Points',
+          'Description ou motif',
           '',
-          'Adresse mail de l\\'utilisateur',
-          'Date opérations d\\'insertion'
+          'WebApp RPA',
+          'Adresse mail de connexion',
+          "Date d'opération"
         ]);
       }
       sheet.appendRow([
-        body.dateRando,         // Col A
-        body.membre,            // Col B
-        body.points,            // Col C
-        body.description,       // Col D
-        "",                     // Col E (vide)
-        body.mail || '',        // Col F
-        body.dateOperation      // Col G (jj/mm/aaaa hh:mm:ss)
+        body.dateRando,          // Col A: Date rando
+        body.membre,             // Col B: Nom du membre
+        body.points,             // Col C: Points
+        body.description,        // Col D: Description ou motif
+        "",                      // Col E: (vide)
+        "WebApp RPA",            // Col F: WebApp RPA
+        body.mail || '',         // Col G: Adresse mail de connexion
+        body.dateOperation       // Col H: Date opération (jj/mm/aaaa hh:mm:ss)
       ]);
       return jsonResponse({ success: true });
     }
 
-    // 5. Modifier une opération existante dans la feuille Opérations
+    // 5. Modifier une opération existante dans la feuille Opérations (Colonnes A à H)
     if (body.action === 'updateOperation' && body.rowNumber) {
       var sheet = ss.getSheetByName('Opérations');
       if (sheet) {
-        sheet.getRange(body.rowNumber, 1, 1, 7).setValues([[
+        sheet.getRange(body.rowNumber, 1, 1, 8).setValues([[
           body.dateRando,
           body.membre,
           body.points,
           body.description,
           "",
+          "WebApp RPA",
           body.mail || '',
           body.dateOperation
         ]]);
@@ -512,14 +524,15 @@ export function parseOperationDateTime(str: string): number {
 }
 
 /**
- * Fetch recent operations from the 'Opérations' sheet (Columns A to G)
+ * Fetch recent operations from the 'Opérations' sheet (Columns A to H)
  * Col A: Date rando
- * Col B: Nom membre
- * Col C: Points attribué
- * Col D: Descriptions
+ * Col B: Nom du membre
+ * Col C: Points
+ * Col D: Description ou motif
  * Col E: (vide)
- * Col F: Adresse mail de l'utilisateur
- * Col G: Date opérations d'insertion (jj/mm/aaaa hh:mm:ss)
+ * Col F: "WebApp RPA"
+ * Col G: Adresse mail de connexion
+ * Col H: Date opération (jj/mm/aaaa hh:mm:ss)
  */
 export async function fetchRecentOperationsFromSheet(
   spreadsheetId: string,
@@ -528,7 +541,7 @@ export async function fetchRecentOperationsFromSheet(
   const token = await getAccessToken();
   if (!token) return [];
 
-  const encodedRange = encodeURIComponent(`${sheetName}!A1:G500`);
+  const encodedRange = encodeURIComponent(`${sheetName}!A1:H500`);
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}?valueRenderOption=FORMATTED_VALUE`,
     {
@@ -550,6 +563,11 @@ export async function fetchRecentOperationsFromSheet(
     // Must have at least a member name or date
     if (!row[0] && !row[1]) continue;
 
+    const hasColH = row.length >= 8 && row[7] !== undefined && String(row[7]).trim() !== '';
+    const mailVal = hasColH ? String(row[6] || '') : String(row[5] || '');
+    const dateOpVal = hasColH ? String(row[7] || '') : String(row[6] || row[0] || '');
+    const sourceVal = hasColH ? String(row[5] || 'WebApp RPA') : 'WebApp RPA';
+
     ops.push({
       id: `op-sheet-${i}`,
       rowNumber: i + 1,
@@ -558,8 +576,9 @@ export async function fetchRecentOperationsFromSheet(
       points: Number(row[2]) || 0,
       description: String(row[3] || ''),
       colE: '',
-      mail: String(row[5] || ''),
-      dateOperation: String(row[6] || row[0] || ''),
+      source: sourceVal,
+      mail: mailVal,
+      dateOperation: dateOpVal,
       syncedToGoogleSheets: true,
     });
   }
@@ -569,7 +588,7 @@ export async function fetchRecentOperationsFromSheet(
 }
 
 /**
- * Insert an operation into the 'Opérations' sheet (Columns A to G)
+ * Insert an operation into the 'Opérations' sheet (Columns A to H)
  */
 export async function insertOperationToSheet(
   spreadsheetId: string,
@@ -589,7 +608,7 @@ export async function insertOperationToSheet(
   // First, verify if the sheet has a header row
   const checkRes = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-      `${sheetName}!A1:G1`
+      `${sheetName}!A1:H1`
     )}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
@@ -597,10 +616,10 @@ export async function insertOperationToSheet(
   if (checkRes.ok) {
     const checkData = await checkRes.json();
     if (!checkData.values || checkData.values.length === 0) {
-      // Add default header row: Col A à G
+      // Add default header row: Col A à H
       await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-          `${sheetName}!A1:G1`
+          `${sheetName}!A1:H1`
         )}?valueInputOption=USER_ENTERED`,
         {
           method: 'PUT',
@@ -612,12 +631,13 @@ export async function insertOperationToSheet(
             values: [
               [
                 'Date rando',
-                'Nom membre',
-                'Points attribué',
-                'Descriptions',
+                'Nom du membre',
+                'Points',
+                'Description ou motif',
                 '',
-                "Adresse mail de l'utilisateur",
-                "Date opérations d'insertion",
+                'WebApp RPA',
+                'Adresse mail de connexion',
+                "Date d'opération",
               ],
             ],
           }),
@@ -626,9 +646,9 @@ export async function insertOperationToSheet(
     }
   }
 
-  // Append operation row
+  // Append operation row (Col A to H)
   const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-    `${sheetName}!A:G`
+    `${sheetName}!A:H`
   )}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
 
   const bodyData = {
@@ -639,6 +659,7 @@ export async function insertOperationToSheet(
         op.points,
         op.description,
         '',
+        'WebApp RPA',
         op.mail,
         op.dateOperation,
       ],
@@ -664,7 +685,7 @@ export async function insertOperationToSheet(
 }
 
 /**
- * Update an existing operation in 'Opérations' sheet
+ * Update an existing operation in 'Opérations' sheet (Columns A to H)
  */
 export async function updateOperationInSheet(
   spreadsheetId: string,
@@ -683,7 +704,7 @@ export async function updateOperationInSheet(
   if (!token) throw new Error('Non authentifié.');
 
   const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-    `${sheetName}!A${op.rowNumber}:G${op.rowNumber}`
+    `${sheetName}!A${op.rowNumber}:H${op.rowNumber}`
   )}?valueInputOption=USER_ENTERED`;
 
   const res = await fetch(updateUrl, {
@@ -700,6 +721,7 @@ export async function updateOperationInSheet(
           op.points,
           op.description,
           '',
+          'WebApp RPA',
           op.mail,
           op.dateOperation,
         ],

@@ -16,14 +16,15 @@ export interface MotifKey {
 
 export interface OperationRecord {
   id: string;
-  rowNumber?: number; // Row index in Google Sheets (2-indexed)
-  dateRando: string;   // Col A: Date rando (jj/mm/aaaa)
-  membre: string;      // Col B: Nom membre
-  points: number;      // Col C: Points attribués
-  description: string; // Col D: Descriptions / Motif
-  colE?: string;       // Col E: (ne rien mettre - vide)
-  mail: string;        // Col F: Adresse mail de l'utilisateur
-  dateOperation: string; // Col G: Date opérations d'insertion (jj/mm/aaaa hh:mm:ss)
+  rowNumber?: number;    // Ligne dans Google Sheets (indexée à partir de 2)
+  dateRando: string;     // Col A: Date rando (jj/mm/aaaa)
+  membre: string;        // Col B: Nom du membre
+  points: number;        // Col C: Points
+  description: string;   // Col D: Description ou motif
+  colE?: string;         // Col E: (laisser vide)
+  source?: string;       // Col F: "WebApp RPA"
+  mail: string;          // Col G: Adresse mail de connexion
+  dateOperation: string; // Col H: Date opération (jj/mm/aaaa hh:mm:ss)
   syncedToGoogleSheets?: boolean;
 }
 

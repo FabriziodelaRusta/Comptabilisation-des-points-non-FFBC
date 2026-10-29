@@ -228,17 +228,22 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                   className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
                 >
                   <div className="flex items-center gap-1">
-                    <span>Descriptions</span>
+                    <span>Description / Motif</span>
                     {renderSortIcon('description')}
                   </div>
                 </th>
 
-                {/* 5. Mail Utilisateur */}
-                <th className="px-3.5 py-3">
-                  <span>Mail utilisateur</span>
+                {/* 5. Source (Col F) */}
+                <th className="px-3.5 py-3 whitespace-nowrap">
+                  <span>Source</span>
                 </th>
 
-                {/* 6. Date Opération with sort */}
+                {/* 6. Mail Connexion (Col G) */}
+                <th className="px-3.5 py-3">
+                  <span>Mail connexion</span>
+                </th>
+
+                {/* 7. Date Opération with sort (Col H) */}
                 <th
                   onClick={() => handleSort('dateOperation')}
                   className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
@@ -249,7 +254,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                   </div>
                 </th>
 
-                {/* 7. Actions */}
+                {/* 8. Actions */}
                 <th className="px-3.5 py-3 text-right">
                   <span>Actions</span>
                 </th>
@@ -292,6 +297,12 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
 
                     <td className="px-3.5 py-3 text-gray-800 font-medium max-w-xs truncate">
                       {op.description}
+                    </td>
+
+                    <td className="px-3.5 py-3 whitespace-nowrap">
+                      <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                        {op.source || 'WebApp RPA'}
+                      </span>
                     </td>
 
                     <td className="px-3.5 py-3 text-gray-500 text-[11px] font-mono whitespace-nowrap">
