@@ -167,13 +167,17 @@ function doGet(e) {
       var dateRandoVal = String(r[m.dateRando - 1] || '').trim();
       if (!membreVal && !dateRandoVal) continue;
 
+      var checkVal = r[m.checkbox - 1];
+      var isChecked = checkVal === true || String(checkVal).toUpperCase() === 'TRUE' || String(checkVal).toUpperCase() === 'VRAI' || checkVal === 1 || checkVal === '1';
+
       operations.push({
         rowNumber: k + 1,
         dateRando: dateRandoVal,
         membre: membreVal,
         points: parseInt(r[m.points - 1], 10) || 0,
         description: String(r[m.description - 1] || '').trim(),
-        colE: '',
+        colE: isChecked,
+        isChecked: isChecked,
         source: String(r[m.source - 1] || 'WebApp RPA').trim(),
         mail: String(r[m.mail - 1] || '').trim(),
         dateOperation: String(r[m.dateOperation - 1] || '').trim()
@@ -263,6 +267,14 @@ function doPost(e) {
         }
         
         if (targetRow && targetRow >= 2) {
+          // Contrôle de verrouillage : si la case est cochée (Col E), refuser la modification
+          var curRowVals = data[targetRow - 1] || [];
+          var curCheck = curRowVals[m.checkbox - 1];
+          var isLocked = curCheck === true || String(curCheck).toUpperCase() === 'TRUE' || String(curCheck).toUpperCase() === 'VRAI' || curCheck === 1 || curCheck === '1';
+          if (isLocked) {
+            return jsonResponse({ success: false, error: 'Opération validée (case cochée en colonne E) : modification interdite.' });
+          }
+
           sheet.getRange(targetRow, m.dateRando).setValue(body.dateRando || '');
           sheet.getRange(targetRow, m.membre).setValue(body.membre || '');
           sheet.getRange(targetRow, m.points).setValue(parseInt(body.points, 10) || 0);
@@ -297,6 +309,14 @@ function doPost(e) {
           }
         }
         if (targetRow && targetRow >= 2 && targetRow <= sheet.getLastRow()) {
+          // Contrôle de verrouillage : si la case est cochée (Col E), refuser la suppression
+          var curRowValsDel = data[targetRow - 1] || [];
+          var curCheckDel = curRowValsDel[m.checkbox - 1];
+          var isLockedDel = curCheckDel === true || String(curCheckDel).toUpperCase() === 'TRUE' || String(curCheckDel).toUpperCase() === 'VRAI' || curCheckDel === 1 || curCheckDel === '1';
+          if (isLockedDel) {
+            return jsonResponse({ success: false, error: 'Opération validée (case cochée en colonne E) : suppression interdite.' });
+          }
+
           sheet.deleteRow(targetRow);
         }
       }
@@ -692,6 +712,12 @@ export async function fetchRecentOperationsFromSheet(
     if (!row[0] && !row[1]) continue;
 
     const hasColH = row.length >= 8 && row[7] !== undefined && String(row[7]).trim() !== '';
+    const rawCheck = row[4];
+    const isChecked = rawCheck === true || 
+      String(rawCheck).toUpperCase() === 'TRUE' || 
+      String(rawCheck).toUpperCase() === 'VRAI' || 
+      rawCheck === 1 || 
+      rawCheck === '1';
     const mailVal = hasColH ? String(row[6] || '') : String(row[5] || '');
     const dateOpVal = hasColH ? String(row[7] || '') : String(row[6] || row[0] || '');
     const sourceVal = hasColH ? String(row[5] || 'WebApp RPA') : 'WebApp RPA';
@@ -703,7 +729,8 @@ export async function fetchRecentOperationsFromSheet(
       membre: String(row[1] || ''),
       points: Number(row[2]) || 0,
       description: String(row[3] || ''),
-      colE: '',
+      colE: isChecked,
+      isChecked: isChecked,
       source: sourceVal,
       mail: mailVal,
       dateOperation: dateOpVal,

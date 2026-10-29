@@ -21,7 +21,8 @@ export interface OperationRecord {
   membre: string;        // Col B: Nom du membre
   points: number;        // Col C: Points
   description: string;   // Col D: Description ou motif
-  colE?: string;         // Col E: (laisser vide)
+  colE?: boolean | string; // Col E: Case à cocher de validation
+  isChecked?: boolean;   // true si la case en colonne E est cochée (verrouille modif et suppression)
   source?: string;       // Col F: "WebApp RPA"
   mail: string;          // Col G: Adresse mail de connexion
   dateOperation: string; // Col H: Date opération (jj/mm/aaaa hh:mm:ss)

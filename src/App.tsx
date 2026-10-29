@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   User,
   Users,
@@ -108,6 +108,28 @@ export default function App() {
   // Active selections
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [editingOperation, setEditingOperation] = useState<OperationRecord | null>(null);
+
+  // Calcul dynamique et réactif du solde des points pour chaque membre à partir de la liste des opérations
+  const membersWithPoints = useMemo(() => {
+    return members.map((m) => {
+      const totalPoints = operations
+        .filter((op) => (op.membre || '').trim().toLowerCase() === (m.nom || '').trim().toLowerCase())
+        .reduce((sum, op) => sum + (Number(op.points) || 0), 0);
+      return {
+        ...m,
+        pointsActuels: totalPoints,
+      };
+    });
+  }, [members, operations]);
+
+  const currentSelectedMemberWithPoints = useMemo(() => {
+    if (!selectedMember) return null;
+    if (selectedMember.nom === 'Tous') return selectedMember;
+    const found = membersWithPoints.find(
+      (m) => m.nom.trim().toLowerCase() === selectedMember.nom.trim().toLowerCase()
+    );
+    return found || selectedMember;
+  }, [selectedMember, membersWithPoints]);
 
   // Loading & syncing states
   const [isLoadingMembers, setIsLoadingMembers] = useState<boolean>(false);
@@ -216,19 +238,30 @@ export default function App() {
         if (opsRes?.success && Array.isArray(opsRes.operations)) {
           setOperations(
             opsRes.operations
-              .map((op: any, i: number) => ({
-                id: `op-as-${i}`,
-                rowNumber: op.rowNumber,
-                dateRando: String(op.dateRando || ''),
-                membre: String(op.membre || ''),
-                points: Number(op.points) || 0,
-                description: String(op.description || ''),
-                colE: '',
-                source: String(op.source || 'WebApp RPA'),
-                mail: String(op.mail || ''),
-                dateOperation: String(op.dateOperation || ''),
-                syncedToGoogleSheets: true,
-              }))
+              .map((op: any, i: number) => {
+                const isChecked = Boolean(
+                  op.isChecked ||
+                  op.colE === true ||
+                  String(op.colE).toUpperCase() === 'TRUE' ||
+                  String(op.colE).toUpperCase() === 'VRAI' ||
+                  op.colE === 1 ||
+                  op.colE === '1'
+                );
+                return {
+                  id: `op-as-${i}`,
+                  rowNumber: op.rowNumber,
+                  dateRando: String(op.dateRando || ''),
+                  membre: String(op.membre || ''),
+                  points: Number(op.points) || 0,
+                  description: String(op.description || ''),
+                  colE: isChecked,
+                  isChecked: isChecked,
+                  source: String(op.source || 'WebApp RPA'),
+                  mail: String(op.mail || ''),
+                  dateOperation: String(op.dateOperation || ''),
+                  syncedToGoogleSheets: true,
+                };
+              })
               .sort(
                 (a: OperationRecord, b: OperationRecord) =>
                   parseOperationDateTime(b.dateOperation) - parseOperationDateTime(a.dateOperation)
@@ -519,9 +552,13 @@ export default function App() {
 
   // 2. Trigger edit from list row (Pencil button)
   const handleEditOperation = (op: OperationRecord) => {
+    if (op.isChecked) {
+      showToast('Cette opération est validée dans Google Sheets (case cochée en colonne E). Modification verrouillée.', 'error');
+      return;
+    }
     setEditingOperation(op);
     // Find member or set matching name
-    const found = members.find((m) => m.nom.toLowerCase() === op.membre.toLowerCase());
+    const found = membersWithPoints.find((m) => m.nom.toLowerCase() === op.membre.toLowerCase());
     if (found) {
       setSelectedMember(found);
     } else {
@@ -537,6 +574,10 @@ export default function App() {
 
   // 3. Trigger delete from list row (Trash button)
   const handleDeleteOperation = (op: OperationRecord) => {
+    if (op.isChecked) {
+      showToast('Cette opération est validée dans Google Sheets (case cochée en colonne E). Suppression verrouillée.', 'error');
+      return;
+    }
     setConfirmationData({
       actionType: 'delete',
       operation: {
@@ -560,6 +601,17 @@ export default function App() {
     const { actionType, operation: op } = confirmationData;
 
     try {
+      if (actionType === 'update' || actionType === 'delete') {
+        const existing = operations.find(
+          (item) => item.id === op.id || (op.rowNumber && item.rowNumber === op.rowNumber)
+        );
+        if (existing?.isChecked) {
+          showToast('Opération validée dans Google Sheets (case cochée en colonne E) : action verrouillée.', 'error');
+          setConfirmationData(null);
+          return;
+        }
+      }
+
       if (actionType === 'insert') {
         let synced = false;
         let assignedRowNumber = operations.length + 2;
@@ -597,7 +649,8 @@ export default function App() {
           membre: op.membre,
           points: op.points,
           description: op.description,
-          colE: '',
+          colE: false,
+          isChecked: false,
           source: 'WebApp RPA',
           mail: op.mail,
           dateOperation: op.dateOperation,
@@ -605,13 +658,6 @@ export default function App() {
         };
 
         setOperations((prev) => [newOpRecord, ...prev]);
-
-        // Update member points
-        setMembers((prev) =>
-          prev.map((m) =>
-            m.nom === op.membre ? { ...m, pointsActuels: (m.pointsActuels || 0) + op.points } : m
-          )
-        );
 
         showToast(
           synced
@@ -682,13 +728,6 @@ export default function App() {
         // Remove from local state
         setOperations((prev) =>
           prev.filter((item) => item.id !== op.id && (op.rowNumber ? item.rowNumber !== op.rowNumber : true))
-        );
-
-        // Adjust member points
-        setMembers((prev) =>
-          prev.map((m) =>
-            m.nom === op.membre ? { ...m, pointsActuels: (m.pointsActuels || 0) - op.points } : m
-          )
         );
 
         if (editingOperation && editingOperation.id === op.id) {
@@ -798,8 +837,8 @@ export default function App() {
           {/* Member Selector with Search, Pencil icon, and 'Tous' pseudo-member */}
           <div className="space-y-3">
             <MemberSelector
-              members={members}
-              selectedMember={selectedMember}
+              members={membersWithPoints}
+              selectedMember={currentSelectedMemberWithPoints}
               onSelectMember={(mem) => {
                 setSelectedMember(mem);
                 setEditingOperation(null);
@@ -827,12 +866,12 @@ export default function App() {
                 </div>
               </div>
             </div>
-          ) : selectedMember ? (
+          ) : currentSelectedMemberWithPoints ? (
             /* Specific member selected: display the 3 fields underneath */
             <div className="pt-2 animate-in fade-in duration-200">
               <OperationForm
-                key={`${selectedMember.id}-${editingOperation ? editingOperation.id : 'create'}`}
-                member={selectedMember}
+                key={`${currentSelectedMemberWithPoints.nom}-${editingOperation ? editingOperation.id : 'create'}`}
+                member={currentSelectedMemberWithPoints}
                 motifs={motifs}
                 editingOperation={editingOperation}
                 onCancelEdit={() => setEditingOperation(null)}

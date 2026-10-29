@@ -135,9 +135,21 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
                         </span>
                       )}
                       {selectedMember.pointsActuels !== undefined && (
-                        <span className="text-emerald-700 font-medium flex items-center gap-0.5">
+                        <span
+                          className={`font-semibold flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[11px] ${
+                            selectedMember.pointsActuels < 0
+                              ? 'text-red-800 bg-red-100 border border-red-200'
+                              : 'text-emerald-800 bg-emerald-100 border border-emerald-200'
+                          }`}
+                          title={`Solde total calculé depuis les opérations enregistrées pour ${selectedMember.nom} (somme des points)`}
+                        >
                           <Award className="w-3 h-3 inline text-amber-500" />
-                          {selectedMember.pointsActuels} pts actuels
+                          <span>
+                            {selectedMember.pointsActuels > 0
+                              ? `+${selectedMember.pointsActuels}`
+                              : selectedMember.pointsActuels}{' '}
+                            pts actuels
+                          </span>
                         </span>
                       )}
                     </>
@@ -292,8 +304,14 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
 
                     <div className="flex items-center gap-2">
                       {member.pointsActuels !== undefined && (
-                        <span className="text-xs text-emerald-700 font-semibold bg-emerald-100/70 px-2 py-0.5 rounded-full">
-                          {member.pointsActuels} pts
+                        <span
+                          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            member.pointsActuels < 0
+                              ? 'text-red-800 bg-red-100 border border-red-200'
+                              : 'text-emerald-700 bg-emerald-100/70'
+                          }`}
+                        >
+                          {member.pointsActuels > 0 ? `+${member.pointsActuels}` : member.pointsActuels} pts
                         </span>
                       )}
                       {isSelected && <Check className="w-4 h-4 text-emerald-700 font-bold" />}
