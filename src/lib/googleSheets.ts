@@ -7,16 +7,23 @@ export const LOCAL_STORAGE_SAVED_OPERATIONS = 'rpa_cached_operations_v1';
 export const SAMPLE_APPS_SCRIPT_CODE = `// ========================================================
 // Code Google Apps Script (Code.gs) pour la WebApp RPA Points Non-FFBC
 // Fichier cible : "Points RPA"
+// Schéma strict 8 colonnes (A à H) :
+// Col A : Date rando (jj/mm/aaaa)
+// Col B : Nom du membre
+// Col C : Points (nombre entier)
+// Col D : Description ou motif
+// Col E : Checkbox vide (case à cocher décochée)
+// Col F : WebApp RPA (Source)
+// Col G : Adresse mail de connexion
+// Col H : Date opération (jj/mm/aaaa hh:mm:ss)
 // ========================================================
 
 function getRpaSpreadsheet() {
-  // 1. Si le script est lié au classeur (Extensions > Apps Script)
   try {
     var active = SpreadsheetApp.getActiveSpreadsheet();
     if (active) return active;
   } catch (err) {}
 
-  // 2. Si le script est un projet Apps Script autonome dans Drive
   var files = DriveApp.getFilesByName("Points RPA");
   if (files.hasNext()) {
     return SpreadsheetApp.open(files.next());
@@ -24,92 +31,160 @@ function getRpaSpreadsheet() {
   throw new Error("Classeur 'Points RPA' introuvable dans Google Drive.");
 }
 
+function getSheetCaseInsensitive(ss, targetName) {
+  var direct = ss.getSheetByName(targetName);
+  if (direct) return direct;
+  var norm = targetName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  var allSheets = ss.getSheets();
+  for (var s = 0; s < allSheets.length; s++) {
+    var curName = allSheets[s].getName().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    if (curName === norm) return allSheets[s];
+  }
+  return null;
+}
+
+// Détection intelligente des colonnes selon la ligne 1 (En-têtes)
+// Garantit que chaque information est toujours enregistrée dans le bon champ
+function getOperationsColumnMapping(sheet) {
+  var lastCol = Math.max(sheet.getLastColumn(), 8);
+  var headerValues = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
+  
+  // Ordre strict A à H par défaut (1-indexé)
+  var mapping = {
+    dateRando: 1,      // Col A : Date rando
+    membre: 2,         // Col B : Nom du membre
+    points: 3,         // Col C : Points
+    description: 4,    // Col D : Description ou motif
+    checkbox: 5,       // Col E : Case à cocher vide
+    source: 6,         // Col F : WebApp RPA
+    mail: 7,           // Col G : Adresse mail de connexion
+    dateOperation: 8   // Col H : Date de l'opération
+  };
+  
+  // Si la ligne 1 contient des en-têtes réels, on s'adapte automatiquement
+  for (var c = 0; c < headerValues.length; c++) {
+    var h = String(headerValues[c] || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    if (!h) continue;
+    
+    if (h.includes('rando') || (h.includes('date') && !h.includes('op') && !h.includes('horodat') && !h.includes('timestamp') && !h.includes('saisi') && !h.includes('enreg'))) {
+      mapping.dateRando = c + 1;
+    } else if (h.includes('nom') || h.includes('membre') || h.includes('cyclotouriste') || h.includes('adherent')) {
+      mapping.membre = c + 1;
+    } else if (h.includes('point') || h.includes('pts') || h.includes('score')) {
+      mapping.points = c + 1;
+    } else if (h.includes('desc') || h.includes('motif') || h.includes('activit') || h.includes('remarque') || h.includes('objet')) {
+      mapping.description = c + 1;
+    } else if (h.includes('case') || h.includes('coch') || h.includes('check') || h.includes('valid') || h.includes('traite') || h.includes('vu')) {
+      mapping.checkbox = c + 1;
+    } else if (h.includes('source') || h.includes('webapp') || h.includes('app') || h.includes('origine')) {
+      mapping.source = c + 1;
+    } else if (h.includes('mail') || h.includes('courriel') || h.includes('email') || h.includes('utilisateur') || h.includes('auteur')) {
+      mapping.mail = c + 1;
+    } else if (h.includes('horodat') || h.includes('timestamp') || (h.includes('date') && (h.includes('op') || h.includes('enreg') || h.includes('saisi') || h.includes('creation')))) {
+      mapping.dateOperation = c + 1;
+    }
+  }
+  
+  return { mapping: mapping, maxCol: Math.max(lastCol, 8) };
+}
+
 function doGet(e) {
   var ss = getRpaSpreadsheet();
   var action = (e && e.parameter && e.parameter.action) || 'status';
 
+  // 1. Lire la liste des membres autorisés
   if (action === 'getMembers') {
-    const sheet = ss.getSheetByName('Membres');
+    var sheet = getSheetCaseInsensitive(ss, 'Membres');
     if (!sheet) return jsonResponse({ success: false, error: "Feuille Membres introuvable" });
-    const data = sheet.getDataRange().getValues();
+    var data = sheet.getDataRange().getDisplayValues();
     if (data.length <= 1) return jsonResponse({ success: true, members: [] });
     
-    const headers = data[0].map(h => String(h || '').trim().toLowerCase());
-    let nomIdx = headers.findIndex(h => h.includes('nom') || h === 'membre');
+    var headers = data[0].map(function(h) { return String(h || '').trim().toLowerCase(); });
+    var nomIdx = headers.findIndex(function(h) { return h.includes('nom') || h === 'membre'; });
     if (nomIdx === -1) nomIdx = 0;
-    const majIdx = headers.findIndex(h => h.includes('maj') || h.includes('manuelle') || h === 'afficher');
-    const matriculeIdx = headers.findIndex(h => h.includes('matricule') || h.includes('id'));
+    var majIdx = headers.findIndex(function(h) { return h.includes('maj') || h.includes('manuelle') || h === 'afficher'; });
+    var matriculeIdx = headers.findIndex(function(h) { return h.includes('matricule') || h.includes('id'); });
     
-    const members = [];
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      const nom = row[nomIdx];
+    var members = [];
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      var nom = row[nomIdx];
       if (!nom || String(nom).trim() === '') continue;
       
-      let isMaj = true;
+      var isMaj = true;
       if (majIdx !== -1) {
-        const val = row[majIdx];
-        isMaj = val === true || String(val).toUpperCase() === 'TRUE' || String(val).toUpperCase() === 'VRAI' || val === 1 || val === '1';
+        var val = String(row[majIdx] || '').trim().toUpperCase();
+        isMaj = val === 'TRUE' || val === 'VRAI' || val === '1' || val === 'OUI';
       }
       
       if (isMaj) {
         members.push({
           nom: String(nom).trim(),
-          matricule: matriculeIdx !== -1 && row[matriculeIdx] ? String(row[matriculeIdx]) : ''
+          matricule: matriculeIdx !== -1 && row[matriculeIdx] ? String(row[matriculeIdx]).trim() : ''
         });
       }
     }
     return jsonResponse({ success: true, members: members });
   }
 
+  // 2. Lire les motifs autorisés sous Form_Points_non_FFBC
   if (action === 'getKeys') {
-    const sheet = ss.getSheetByName('Keys');
+    var sheet = getSheetCaseInsensitive(ss, 'Keys');
     if (!sheet) return jsonResponse({ success: true, motifs: [] });
-    const data = sheet.getDataRange().getValues();
-    const motifs = [];
-    for (let i = 0; i < data.length; i++) {
-      if (String(data[i][0]).trim() === 'Form_Points_non_FFBC') {
-        motifs.push({
-          key: 'Form_Points_non_FFBC',
-          label: String(data[i][1]).trim(),
-          defaultPoints: data[i][2] ? Number(data[i][2]) : undefined
-        });
+    var data = sheet.getDataRange().getDisplayValues();
+    var motifs = [];
+    for (var j = 0; j < data.length; j++) {
+      if (String(data[j][0]).trim() === 'Form_Points_non_FFBC') {
+        var label = String(data[j][1] || '').trim();
+        var pts = data[j][2] ? parseInt(data[j][2], 10) : undefined;
+        if (label) {
+          motifs.push({
+            key: 'Form_Points_non_FFBC',
+            label: label,
+            defaultPoints: isNaN(pts) ? undefined : pts
+          });
+        }
       }
     }
     return jsonResponse({ success: true, motifs: motifs });
   }
 
-  // 3. Lire les opérations (Colonnes A à H)
+  // 3. Lire les opérations enregistrées (Colonnes A à H avec détection automatique)
   if (action === 'getOperations') {
-    var sheet = ss.getSheetByName('Opérations');
+    var sheet = getSheetCaseInsensitive(ss, 'Opérations');
     if (!sheet) return jsonResponse({ success: true, operations: [] });
-    var data = sheet.getDataRange().getValues();
+    var data = sheet.getDataRange().getDisplayValues();
+    if (data.length <= 1) return jsonResponse({ success: true, operations: [] });
+
+    var colInfo = getOperationsColumnMapping(sheet);
+    var m = colInfo.mapping;
     var operations = [];
+
     for (var k = 1; k < data.length; k++) {
       var r = data[k];
-      if (!r || r.length === 0 || (!r[0] && !r[1])) continue;
-      // Prise en charge du schéma 8 colonnes (A à H) et rétrocompatibilité 7 colonnes
-      var hasColH = r.length >= 8 && r[7] !== undefined && String(r[7]).trim() !== '';
-      var mailVal = hasColH ? String(r[6] || '') : String(r[5] || '');
-      var dateOpVal = hasColH ? String(r[7] || '') : String(r[6] || r[0] || '');
-      var sourceVal = hasColH ? String(r[5] || 'WebApp RPA') : 'WebApp RPA';
+      if (!r || r.length === 0) continue;
+      var membreVal = String(r[m.membre - 1] || '').trim();
+      var dateRandoVal = String(r[m.dateRando - 1] || '').trim();
+      if (!membreVal && !dateRandoVal) continue;
 
       operations.push({
         rowNumber: k + 1,
-        dateRando: String(r[0] || ''),
-        membre: String(r[1] || ''),
-        points: Number(r[2]) || 0,
-        description: String(r[3] || ''),
+        dateRando: dateRandoVal,
+        membre: membreVal,
+        points: parseInt(r[m.points - 1], 10) || 0,
+        description: String(r[m.description - 1] || '').trim(),
         colE: '',
-        source: sourceVal,
-        mail: mailVal,
-        dateOperation: dateOpVal
+        source: String(r[m.source - 1] || 'WebApp RPA').trim(),
+        mail: String(r[m.mail - 1] || '').trim(),
+        dateOperation: String(r[m.dateOperation - 1] || '').trim()
       });
     }
     return jsonResponse({ success: true, operations: operations });
   }
 
-  return jsonResponse({ success: true, status: 'OK', title: ss.getName() });
+  var opSheet = getSheetCaseInsensitive(ss, 'Opérations');
+  var colMap = opSheet ? getOperationsColumnMapping(opSheet).mapping : null;
+  return jsonResponse({ success: true, status: 'OK', title: ss.getName(), detectedColumns: colMap });
 }
 
 function doPost(e) {
@@ -118,10 +193,16 @@ function doPost(e) {
     var body = JSON.parse(e.postData.contents);
 
     // 4. Insérer une opération dans la feuille Opérations (Colonnes A à H)
-    // Col A = Date rando, Col B = Nom membre, Col C = Points, Col D = Description ou motif
-    // Col E = (vide), Col F = "WebApp RPA", Col G = Mail connexion, Col H = Date opération
+    // Col A : Date rando
+    // Col B : Nom du membre
+    // Col C : Points
+    // Col D : Description ou motif
+    // Col E : Case à cocher vide (décochée)
+    // Col F : "WebApp RPA"
+    // Col G : Adresse mail de connexion
+    // Col H : Date opération (jj/mm/aaaa hh:mm:ss)
     if (body.action === 'addOperation') {
-      var sheet = ss.getSheetByName('Opérations');
+      var sheet = getSheetCaseInsensitive(ss, 'Opérations');
       if (!sheet) {
         sheet = ss.insertSheet('Opérations');
         sheet.appendRow([
@@ -129,55 +210,102 @@ function doPost(e) {
           'Nom du membre',
           'Points',
           'Description ou motif',
-          '',
+          'Case à cocher',
           'WebApp RPA',
           'Adresse mail de connexion',
           "Date d'opération"
         ]);
       }
-      sheet.appendRow([
-        body.dateRando,          // Col A: Date rando
-        body.membre,             // Col B: Nom du membre
-        body.points,             // Col C: Points
-        body.description,        // Col D: Description ou motif
-        "",                      // Col E: (vide)
-        "WebApp RPA",            // Col F: WebApp RPA
-        body.mail || '',         // Col G: Adresse mail de connexion
-        body.dateOperation       // Col H: Date opération (jj/mm/aaaa hh:mm:ss)
-      ]);
-      return jsonResponse({ success: true });
+      
+      var colInfo = getOperationsColumnMapping(sheet);
+      var m = colInfo.mapping;
+      var newRow = sheet.getLastRow() + 1;
+      var totalCols = Math.max(colInfo.maxCol, 8);
+      var rowValues = new Array(totalCols).fill('');
+      
+      rowValues[m.dateRando - 1] = body.dateRando || '';
+      rowValues[m.membre - 1] = body.membre || '';
+      rowValues[m.points - 1] = parseInt(body.points, 10) || 0;
+      rowValues[m.description - 1] = body.description || '';
+      rowValues[m.checkbox - 1] = false;
+      rowValues[m.source - 1] = 'WebApp RPA';
+      rowValues[m.mail - 1] = body.mail || '';
+      rowValues[m.dateOperation - 1] = body.dateOperation || '';
+      
+      sheet.getRange(newRow, 1, 1, totalCols).setValues([rowValues]);
+      
+      try {
+        sheet.getRange(newRow, m.checkbox).insertCheckboxes();
+        sheet.getRange(newRow, m.checkbox).setValue(false);
+      } catch (chkErr) {}
+
+      return jsonResponse({ success: true, rowNumber: newRow });
     }
 
-    // 5. Modifier une opération existante dans la feuille Opérations (Colonnes A à H)
-    if (body.action === 'updateOperation' && body.rowNumber) {
-      var sheet = ss.getSheetByName('Opérations');
+    // 5. Modifier une opération existante (Colonnes A à H)
+    if (body.action === 'updateOperation') {
+      var sheet = getSheetCaseInsensitive(ss, 'Opérations');
       if (sheet) {
-        sheet.getRange(body.rowNumber, 1, 1, 8).setValues([[
-          body.dateRando,
-          body.membre,
-          body.points,
-          body.description,
-          "",
-          "WebApp RPA",
-          body.mail || '',
-          body.dateOperation
-        ]]);
+        var colInfo = getOperationsColumnMapping(sheet);
+        var m = colInfo.mapping;
+        var targetRow = body.rowNumber;
+        var data = sheet.getDataRange().getDisplayValues();
+        
+        // Sécurité : si targetRow ne correspond pas au membre ou à la dateOp, recherche automatique de la bonne ligne
+        if (!targetRow || targetRow < 2 || targetRow > data.length || 
+            (body.dateOperation && data[targetRow - 1] && data[targetRow - 1][m.dateOperation - 1] !== body.dateOperation && data[targetRow - 1][m.membre - 1] !== body.membre)) {
+          for (var r = 1; r < data.length; r++) {
+            if (data[r][m.membre - 1] === body.membre && (!body.dateOperation || data[r][m.dateOperation - 1] === body.dateOperation)) {
+              targetRow = r + 1;
+              break;
+            }
+          }
+        }
+        
+        if (targetRow && targetRow >= 2) {
+          sheet.getRange(targetRow, m.dateRando).setValue(body.dateRando || '');
+          sheet.getRange(targetRow, m.membre).setValue(body.membre || '');
+          sheet.getRange(targetRow, m.points).setValue(parseInt(body.points, 10) || 0);
+          sheet.getRange(targetRow, m.description).setValue(body.description || '');
+          sheet.getRange(targetRow, m.source).setValue('WebApp RPA');
+          sheet.getRange(targetRow, m.mail).setValue(body.mail || '');
+          sheet.getRange(targetRow, m.dateOperation).setValue(body.dateOperation || '');
+          try {
+            sheet.getRange(targetRow, m.checkbox).insertCheckboxes();
+          } catch (chkErr) {}
+          return jsonResponse({ success: true, rowNumber: targetRow });
+        }
       }
       return jsonResponse({ success: true });
     }
 
-    // 6. Supprimer une opération dans la feuille Opérations
-    if (body.action === 'deleteOperation' && body.rowNumber) {
-      var sheet = ss.getSheetByName('Opérations');
+    // 6. Supprimer une opération
+    if (body.action === 'deleteOperation') {
+      var sheet = getSheetCaseInsensitive(ss, 'Opérations');
       if (sheet) {
-        sheet.deleteRow(body.rowNumber);
+        var colInfo = getOperationsColumnMapping(sheet);
+        var m = colInfo.mapping;
+        var targetRow = body.rowNumber;
+        var data = sheet.getDataRange().getDisplayValues();
+        if (!targetRow || targetRow < 2 || targetRow > data.length || 
+            (body.dateOperation && data[targetRow - 1] && data[targetRow - 1][m.dateOperation - 1] !== body.dateOperation)) {
+          for (var r = 1; r < data.length; r++) {
+            if (data[r][m.membre - 1] === body.membre && data[r][m.dateOperation - 1] === body.dateOperation) {
+              targetRow = r + 1;
+              break;
+            }
+          }
+        }
+        if (targetRow && targetRow >= 2 && targetRow <= sheet.getLastRow()) {
+          sheet.deleteRow(targetRow);
+        }
       }
       return jsonResponse({ success: true });
     }
 
     // 7. Ajouter un membre dans la feuille Membres
     if (body.action === 'addMember') {
-      var sheet = ss.getSheetByName('Membres');
+      var sheet = getSheetCaseInsensitive(ss, 'Membres');
       if (!sheet) sheet = ss.insertSheet('Membres');
       sheet.appendRow([body.nom, body.matricule || '', true, 'Ajouté via WebApp']);
       return jsonResponse({ success: true });
@@ -185,7 +313,7 @@ function doPost(e) {
 
     // 8. Ajouter un motif dans la table Keys
     if (body.action === 'addMotif') {
-      var sheet = ss.getSheetByName('Keys');
+      var sheet = getSheetCaseInsensitive(ss, 'Keys');
       if (!sheet) sheet = ss.insertSheet('Keys');
       sheet.appendRow(['Form_Points_non_FFBC', body.label, body.points || '']);
       return jsonResponse({ success: true });
@@ -193,7 +321,7 @@ function doPost(e) {
 
     // 9. Modifier un motif existant dans la table Keys
     if (body.action === 'updateMotif') {
-      var sheet = ss.getSheetByName('Keys');
+      var sheet = getSheetCaseInsensitive(ss, 'Keys');
       if (sheet) {
         var data = sheet.getDataRange().getValues();
         for (var i = 1; i < data.length; i++) {
@@ -634,7 +762,7 @@ export async function insertOperationToSheet(
                 'Nom du membre',
                 'Points',
                 'Description ou motif',
-                '',
+                'Case à cocher',
                 'WebApp RPA',
                 'Adresse mail de connexion',
                 "Date d'opération",
@@ -658,10 +786,10 @@ export async function insertOperationToSheet(
         op.membre,
         op.points,
         op.description,
-        '',
-        'WebApp RPA',
-        op.mail,
-        op.dateOperation,
+        false, // Col E: Checkbox vide (case à cocher non cochée)
+        'WebApp RPA', // Col F: Source
+        op.mail,      // Col G: Adresse mail de connexion
+        op.dateOperation, // Col H: Date opération
       ],
     ],
   };
@@ -720,10 +848,10 @@ export async function updateOperationInSheet(
           op.membre,
           op.points,
           op.description,
-          '',
-          'WebApp RPA',
-          op.mail,
-          op.dateOperation,
+          false, // Col E: Checkbox vide
+          'WebApp RPA', // Col F: Source
+          op.mail,      // Col G: Mail
+          op.dateOperation, // Col H: Date opération
         ],
       ],
     }),
@@ -738,7 +866,7 @@ export async function updateOperationInSheet(
 }
 
 /**
- * Delete an operation from 'Opérations' sheet (clearing row)
+ * Delete an operation from 'Opérations' sheet (clearing row across columns A to H)
  */
 export async function deleteOperationInSheet(
   spreadsheetId: string,
@@ -749,7 +877,7 @@ export async function deleteOperationInSheet(
   if (!token) throw new Error('Non authentifié.');
 
   const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-    `${sheetName}!A${rowNumber}:G${rowNumber}`
+    `${sheetName}!A${rowNumber}:H${rowNumber}`
   )}:clear`;
 
   const res = await fetch(clearUrl, {

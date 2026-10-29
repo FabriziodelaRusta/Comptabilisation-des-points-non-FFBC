@@ -562,9 +562,10 @@ export default function App() {
     try {
       if (actionType === 'insert') {
         let synced = false;
+        let assignedRowNumber = operations.length + 2;
 
         if (sheetConfig.appsScriptUrl) {
-          await postToAppsScript(sheetConfig.appsScriptUrl, {
+          const res = await postToAppsScript(sheetConfig.appsScriptUrl, {
             action: 'addOperation',
             dateRando: op.dateRando,
             membre: op.membre,
@@ -574,6 +575,9 @@ export default function App() {
             dateOperation: op.dateOperation,
           });
           synced = true;
+          if (res?.rowNumber && typeof res.rowNumber === 'number') {
+            assignedRowNumber = res.rowNumber;
+          }
         } else if (isGoogleConnected && sheetConfig.spreadsheetId) {
           await insertOperationToSheet(sheetConfig.spreadsheetId, sheetConfig.operationsSheetName, {
             dateRando: op.dateRando,
@@ -588,7 +592,7 @@ export default function App() {
 
         const newOpRecord: OperationRecord = {
           id: `op-${Date.now()}`,
-          rowNumber: operations.length + 2,
+          rowNumber: assignedRowNumber,
           dateRando: op.dateRando,
           membre: op.membre,
           points: op.points,

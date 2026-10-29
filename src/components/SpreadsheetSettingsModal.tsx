@@ -55,6 +55,7 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
     success: boolean;
     title?: string;
     sheets?: string[];
+    detectedColumns?: Record<string, number>;
     error?: string;
   } | null>(null);
 
@@ -85,6 +86,7 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
           success: true,
           title: res.title || 'Classeur RPA connecté via Apps Script',
           sheets: ['Membres', 'Keys', 'Opérations'],
+          detectedColumns: res.detectedColumns || undefined,
         });
       } catch (err: any) {
         setTestResult({
@@ -360,6 +362,21 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
                   {testResult.sheets && (
                     <div className="text-gray-600 text-[11px]">
                       Onglets disponibles : {testResult.sheets.join(', ')}
+                    </div>
+                  )}
+                  {testResult.detectedColumns && (
+                    <div className="mt-2 p-2 bg-white/80 rounded-lg border border-emerald-300 text-[11px] text-emerald-950 font-mono">
+                      <div className="font-bold mb-1 text-emerald-900">Mappage automatique des colonnes détecté :</div>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10.5px]">
+                        <div>• Date rando : Col {String.fromCharCode(64 + testResult.detectedColumns.dateRando)} ({testResult.detectedColumns.dateRando})</div>
+                        <div>• Membre : Col {String.fromCharCode(64 + testResult.detectedColumns.membre)} ({testResult.detectedColumns.membre})</div>
+                        <div>• Points : Col {String.fromCharCode(64 + testResult.detectedColumns.points)} ({testResult.detectedColumns.points})</div>
+                        <div>• Motif : Col {String.fromCharCode(64 + testResult.detectedColumns.description)} ({testResult.detectedColumns.description})</div>
+                        <div>• Checkbox : Col {String.fromCharCode(64 + testResult.detectedColumns.checkbox)} ({testResult.detectedColumns.checkbox})</div>
+                        <div>• Source : Col {String.fromCharCode(64 + testResult.detectedColumns.source)} ({testResult.detectedColumns.source})</div>
+                        <div>• Mail : Col {String.fromCharCode(64 + testResult.detectedColumns.mail)} ({testResult.detectedColumns.mail})</div>
+                        <div>• Date opération : Col {String.fromCharCode(64 + testResult.detectedColumns.dateOperation)} ({testResult.detectedColumns.dateOperation})</div>
+                      </div>
                     </div>
                   )}
                 </div>

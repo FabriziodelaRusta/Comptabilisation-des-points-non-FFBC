@@ -106,7 +106,7 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
                   <span>Comptabilisation des Points Non FFBC</span>
                 </h1>
                 <span className="bg-emerald-700/80 text-emerald-200 text-xs px-2 py-0.5 rounded-full font-medium border border-emerald-600/60">
-                  v2.4 Méthode B
+                  v2.5 Méthode B
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-emerald-100/95 mt-1 max-w-3xl leading-relaxed">
