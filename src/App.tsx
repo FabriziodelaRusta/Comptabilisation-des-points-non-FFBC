@@ -20,8 +20,9 @@ import {
   ShieldCheck,
   FileSpreadsheet,
   Eye,
+  ShieldAlert,
 } from 'lucide-react';
-import { Member, MotifKey, OperationRecord, SheetConfig, UserProfile } from './types';
+import { Member, MotifKey, OperationRecord, SheetConfig, UserProfile, UserPermission } from './types';
 import {
   DEFAULT_MEMBERS,
   DEFAULT_MOTIFS,
@@ -31,25 +32,16 @@ import {
   initAuth,
   googleSignIn,
   logout,
-  getAccessToken,
 } from './lib/firebase';
 import {
   LOCAL_STORAGE_SHEET_KEY,
   LOCAL_STORAGE_SAVED_OPERATIONS,
   formatBelgianDateTime,
   formatBelgianDate,
-  fetchMembersFromSheet,
-  fetchMotifsFromSheet,
-  fetchRecentOperationsFromSheet,
-  insertOperationToSheet,
-  updateOperationInSheet,
-  deleteOperationInSheet,
-  addMemberToSheet,
-  addMotifToSheet,
-  updateMotifInSheet,
   fetchFromAppsScript,
   postToAppsScript,
   parseOperationDateTime,
+  checkUserSheetPermission,
 } from './lib/googleSheets';
 import { HeaderBanner } from './components/HeaderBanner';
 import { MemberSelector, ALL_MEMBERS_OPTION } from './components/MemberSelector';
@@ -69,8 +61,10 @@ export default function App() {
   // Authentication state
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(false);
+  const [userPermission, setUserPermission] = useState<UserPermission | null>(null);
+  const [isCheckingPermission, setIsCheckingPermission] = useState<boolean>(false);
 
-  // Spreadsheet configuration state (Méthode B active par défaut)
+  // Spreadsheet configuration state
   const [sheetConfig, setSheetConfig] = useState<SheetConfig>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_SHEET_KEY);
@@ -82,25 +76,22 @@ export default function App() {
         if (!parsed.spreadsheetName || parsed.spreadsheetName.includes('Calcul des Points')) {
           parsed.spreadsheetName = 'Points RPA';
         }
-        parsed.syncMode = 'apps_script';
         return parsed;
       }
     } catch {
       // ignore
     }
     return {
-      spreadsheetId: '',
       spreadsheetName: 'Points RPA',
       membresSheetName: 'Membres',
       keysSheetName: 'Keys',
       operationsSheetName: 'Opérations',
       isCustomConfigured: true,
       appsScriptUrl: DEFAULT_APPS_SCRIPT_URL,
-      syncMode: 'apps_script',
     };
   });
 
-  // App data state - Aucune donnée de démo, seules les vraies données de la feuille sont affichées
+  // App data state
   const [members, setMembers] = useState<Member[]>([]);
   const [motifs, setMotifs] = useState<MotifKey[]>([]);
   const [operations, setOperations] = useState<OperationRecord[]>([]);
@@ -144,7 +135,7 @@ export default function App() {
   const [currentMotifToEdit, setCurrentMotifToEdit] = useState<MotifKey | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
 
-  // Confirmation Modal state for Workspace mutating operations
+  // Confirmation Modal state for mutating operations
   const [confirmationData, setConfirmationData] = useState<{
     actionType: 'insert' | 'update' | 'delete';
     operation: {
@@ -190,166 +181,143 @@ export default function App() {
     }
   }, [sheetConfig]);
 
-  // Initialize Firebase Auth listener
+  // Contrôle des permissions Google Sheets en écriture (Propriétaire ou Éditeur Drive)
+  const checkPermissions = useCallback(
+    async (userToTest?: UserProfile | null) => {
+      const targetUser = userToTest !== undefined ? userToTest : currentUser;
+      if (!targetUser?.email || !sheetConfig.appsScriptUrl) {
+        setUserPermission(null);
+        return;
+      }
+      setIsCheckingPermission(true);
+      try {
+        const perm = await checkUserSheetPermission(sheetConfig.appsScriptUrl, targetUser.email);
+        setUserPermission(perm);
+      } catch (err) {
+        console.warn('Erreur vérification permission:', err);
+      } finally {
+        setIsCheckingPermission(false);
+      }
+    },
+    [currentUser, sheetConfig.appsScriptUrl]
+  );
+
+  // Initialize Firebase Auth listener (restaure automatiquement la session si déjà connecté)
   useEffect(() => {
     const unsubscribe = initAuth(
-      (user, token) => {
-        setCurrentUser({
+      (user) => {
+        const profile: UserProfile = {
           uid: user.uid,
           email: user.email,
           displayName: user.displayName,
           photoURL: user.photoURL,
-        });
+        };
+        setCurrentUser(profile);
         setIsGoogleConnected(true);
+        checkPermissions(profile);
       },
       () => {
         setCurrentUser(null);
         setIsGoogleConnected(false);
+        setUserPermission(null);
       }
     );
     return () => unsubscribe();
-  }, []);
+  }, [checkPermissions]);
 
-  // Fetch or reload data from Google Sheets or Apps Script
+  // Fetch or reload data from Google Sheets via Apps Script
   const loadDataFromGoogleSheets = useCallback(async () => {
-    // Mode 1: Apps Script Web App URL
-    if (sheetConfig.appsScriptUrl) {
-      setIsSyncing(true);
-      try {
-        setIsLoadingMembers(true);
-        const membersRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getMembers');
-        if (membersRes?.success && Array.isArray(membersRes.members)) {
-          setMembers(
-            membersRes.members.map((m: any, i: number) => ({
-              id: `mem-as-${i}`,
-              nom: m.nom,
-              matricule: m.matricule,
-              afficherMajManuelle: true,
-            }))
-          );
-        }
-
-        const keysRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getKeys');
-        if (keysRes?.success && Array.isArray(keysRes.motifs)) {
-          setMotifs(keysRes.motifs);
-        }
-
-        const opsRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getOperations');
-        if (opsRes?.success && Array.isArray(opsRes.operations)) {
-          setOperations(
-            opsRes.operations
-              .map((op: any, i: number) => {
-                const isChecked = Boolean(
-                  op.isChecked ||
-                  op.colE === true ||
-                  String(op.colE).toUpperCase() === 'TRUE' ||
-                  String(op.colE).toUpperCase() === 'VRAI' ||
-                  op.colE === 1 ||
-                  op.colE === '1'
-                );
-                return {
-                  id: `op-as-${i}`,
-                  rowNumber: op.rowNumber,
-                  dateRando: String(op.dateRando || ''),
-                  membre: String(op.membre || ''),
-                  points: Number(op.points) || 0,
-                  description: String(op.description || ''),
-                  colE: isChecked,
-                  isChecked: isChecked,
-                  source: String(op.source || 'WebApp RPA'),
-                  mail: String(op.mail || ''),
-                  dateOperation: String(op.dateOperation || ''),
-                  syncedToGoogleSheets: true,
-                };
-              })
-              .sort(
-                (a: OperationRecord, b: OperationRecord) =>
-                  parseOperationDateTime(b.dateOperation) - parseOperationDateTime(a.dateOperation)
-              )
-          );
-        }
-
-        showToast('Synchronisé avec succès via votre script Google Apps Script !', 'success');
-      } catch (err: any) {
-        console.error('Erreur Apps Script:', err);
-        showToast(err?.message || 'Erreur lors de la synchronisation avec le script Apps Script.', 'error');
-      } finally {
-        setIsSyncing(false);
-        setIsLoadingMembers(false);
-      }
-      return;
-    }
-
-    // Mode 2: Google Sheets API via OAuth
-    if (!sheetConfig.spreadsheetId) return;
-
-    const token = await getAccessToken();
-    if (!token) return;
+    if (!sheetConfig.appsScriptUrl) return;
 
     setIsSyncing(true);
     try {
       setIsLoadingMembers(true);
-      const sheetMembers = await fetchMembersFromSheet(
-        sheetConfig.spreadsheetId,
-        sheetConfig.membresSheetName
-      );
-      if (sheetMembers && sheetMembers.length > 0) {
-        setMembers(sheetMembers);
+      const membersRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getMembers');
+      if (membersRes?.success && Array.isArray(membersRes.members)) {
+        setMembers(
+          membersRes.members.map((m: any, i: number) => ({
+            id: `mem-as-${i}`,
+            nom: m.nom,
+            matricule: m.matricule,
+            afficherMajManuelle: true,
+          }))
+        );
       }
 
-      const sheetMotifs = await fetchMotifsFromSheet(
-        sheetConfig.spreadsheetId,
-        sheetConfig.keysSheetName
-      );
-      if (sheetMotifs && sheetMotifs.length > 0) {
-        setMotifs(sheetMotifs);
+      const keysRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getKeys');
+      if (keysRes?.success && Array.isArray(keysRes.motifs)) {
+        setMotifs(keysRes.motifs);
       }
 
-      const sheetOperations = await fetchRecentOperationsFromSheet(
-        sheetConfig.spreadsheetId,
-        sheetConfig.operationsSheetName
-      );
-      if (sheetOperations && sheetOperations.length > 0) {
-        setOperations(sheetOperations);
+      const opsRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getOperations');
+      if (opsRes?.success && Array.isArray(opsRes.operations)) {
+        setOperations(
+          opsRes.operations
+            .map((op: any, i: number) => {
+              const isChecked = Boolean(
+                op.isChecked ||
+                op.colE === true ||
+                String(op.colE).toUpperCase() === 'TRUE' ||
+                String(op.colE).toUpperCase() === 'VRAI' ||
+                op.colE === 1 ||
+                op.colE === '1'
+              );
+              return {
+                id: `op-as-${i}`,
+                rowNumber: op.rowNumber,
+                dateRando: String(op.dateRando || ''),
+                membre: String(op.membre || ''),
+                points: Number(op.points) || 0,
+                description: String(op.description || ''),
+                colE: isChecked,
+                isChecked: isChecked,
+                source: String(op.source || 'WebApp RPA'),
+                mail: String(op.mail || ''),
+                dateOperation: String(op.dateOperation || ''),
+                syncedToGoogleSheets: true,
+              };
+            })
+            .sort(
+              (a: OperationRecord, b: OperationRecord) =>
+                parseOperationDateTime(b.dateOperation) - parseOperationDateTime(a.dateOperation)
+            )
+        );
       }
 
-      showToast('Synchronisation avec Google Sheets réussie !', 'success');
+      showToast('Données synchronisées avec succès depuis Points RPA !', 'success');
+      if (currentUser?.email) {
+        checkPermissions(currentUser);
+      }
     } catch (err: any) {
-      console.error('Erreur de synchronisation Google Sheets:', err);
-      showToast(err?.message || 'Erreur lors du chargement de la feuille Google Sheets.', 'error');
+      console.error('Erreur Apps Script:', err);
+      showToast(err?.message || 'Erreur lors de la synchronisation avec le script Apps Script.', 'error');
     } finally {
       setIsSyncing(false);
       setIsLoadingMembers(false);
     }
-  }, [sheetConfig]);
+  }, [sheetConfig.appsScriptUrl, currentUser, checkPermissions]);
 
   useEffect(() => {
     if (sheetConfig.appsScriptUrl) {
       loadDataFromGoogleSheets();
-    } else if (isGoogleConnected && sheetConfig.spreadsheetId) {
-      loadDataFromGoogleSheets();
     }
-  }, [isGoogleConnected, sheetConfig.spreadsheetId, sheetConfig.appsScriptUrl, loadDataFromGoogleSheets]);
+  }, [sheetConfig.appsScriptUrl, loadDataFromGoogleSheets]);
 
   // Sign In handler
   const handleSignIn = async () => {
     try {
       const res = await googleSignIn();
-      if (res) {
-        setCurrentUser({
+      if (res?.user) {
+        const profile: UserProfile = {
           uid: res.user.uid,
           email: res.user.email,
           displayName: res.user.displayName,
           photoURL: res.user.photoURL,
-        });
+        };
+        setCurrentUser(profile);
         setIsGoogleConnected(true);
         showToast(`Connecté avec le compte ${res.user.email}`, 'success');
-
-        if (sheetConfig.spreadsheetId) {
-          loadDataFromGoogleSheets();
-        } else {
-          setIsSettingsModalOpen(true);
-        }
+        checkPermissions(profile);
       }
     } catch (err: any) {
       showToast(err?.message || 'Échec de la connexion Google.', 'error');
@@ -361,11 +329,21 @@ export default function App() {
     await logout();
     setCurrentUser(null);
     setIsGoogleConnected(false);
+    setUserPermission(null);
     showToast('Déconnecté du compte Google.', 'info');
   };
 
   // Add Member handler
   const handleAddMember = async (memberData: { nom: string; prenom?: string; matricule?: string }) => {
+    if (!currentUser) {
+      showToast('Veuillez vous connecter avec votre compte Google.', 'error');
+      return;
+    }
+    if (userPermission && !userPermission.canWrite) {
+      showToast("Votre compte n'a pas les droits d'écriture sur le classeur Google Sheets.", 'error');
+      return;
+    }
+
     setActionLoading(true);
     try {
       const fullName = memberData.prenom
@@ -377,13 +355,8 @@ export default function App() {
           action: 'addMember',
           nom: fullName,
           matricule: memberData.matricule || '',
+          mail: currentUser.email,
         });
-      } else if (isGoogleConnected && sheetConfig.spreadsheetId) {
-        await addMemberToSheet(
-          sheetConfig.spreadsheetId,
-          sheetConfig.membresSheetName,
-          memberData
-        );
       }
 
       const newMember: Member = {
@@ -408,6 +381,15 @@ export default function App() {
 
   // Add Motif handler
   const handleAddMotif = async (label: string, defaultPoints?: number) => {
+    if (!currentUser) {
+      showToast('Veuillez vous connecter avec votre compte Google.', 'error');
+      return;
+    }
+    if (userPermission && !userPermission.canWrite) {
+      showToast("Votre compte n'a pas les droits d'écriture sur le classeur Google Sheets.", 'error');
+      return;
+    }
+
     setActionLoading(true);
     try {
       if (sheetConfig.appsScriptUrl) {
@@ -415,14 +397,8 @@ export default function App() {
           action: 'addMotif',
           label,
           points: defaultPoints,
+          mail: currentUser.email,
         });
-      } else if (isGoogleConnected && sheetConfig.spreadsheetId) {
-        await addMotifToSheet(
-          sheetConfig.spreadsheetId,
-          sheetConfig.keysSheetName,
-          label,
-          defaultPoints
-        );
       }
 
       const newMotif: MotifKey = {
@@ -434,7 +410,7 @@ export default function App() {
       setMotifs((prev) => [newMotif, ...prev]);
       showToast(`Motif « ${label} » ajouté sous Form_Points_non_FFBC !`, 'success');
     } catch (err: any) {
-      showToast(err?.message || 'Erreur lors de l\'ajout du motif.', 'error');
+      showToast(err?.message || "Erreur lors de l'ajout du motif.", 'error');
       throw err;
     } finally {
       setActionLoading(false);
@@ -460,8 +436,17 @@ export default function App() {
     setIsEditMotifModalOpen(true);
   };
 
-  // Update Motif handler (Apps Script, Google Sheets, or Local)
+  // Update Motif handler
   const handleUpdateMotif = async (oldLabel: string, newLabel: string, defaultPoints?: number) => {
+    if (!currentUser) {
+      showToast('Veuillez vous connecter avec votre compte Google.', 'error');
+      return;
+    }
+    if (userPermission && !userPermission.canWrite) {
+      showToast("Votre compte n'a pas les droits d'écriture sur le classeur Google Sheets.", 'error');
+      return;
+    }
+
     setActionLoading(true);
     try {
       if (sheetConfig.appsScriptUrl) {
@@ -470,18 +455,10 @@ export default function App() {
           oldLabel,
           newLabel,
           points: defaultPoints,
+          mail: currentUser.email,
         });
-      } else if (isGoogleConnected && sheetConfig.spreadsheetId) {
-        await updateMotifInSheet(
-          sheetConfig.spreadsheetId,
-          sheetConfig.keysSheetName,
-          oldLabel,
-          newLabel,
-          defaultPoints
-        );
       }
 
-      // Update in motifs state
       setMotifs((prev) =>
         prev.map((m) =>
           m.label === oldLabel
@@ -490,7 +467,6 @@ export default function App() {
         )
       );
 
-      // Update in local operations list if matches
       setOperations((prev) =>
         prev.map((op) => (op.description === oldLabel ? { ...op, description: newLabel } : op))
       );
@@ -511,13 +487,26 @@ export default function App() {
     points: number;
     description: string;
   }) => {
+    if (!currentUser || !currentUser.email) {
+      showToast('Veuillez vous connecter avec votre compte Google pour enregistrer des points.', 'error');
+      return;
+    }
+
+    if (userPermission && !userPermission.canWrite) {
+      showToast(
+        userPermission.reason || "Votre compte Google n'est pas autorisé en écriture sur le classeur Points RPA.",
+        'error'
+      );
+      return;
+    }
+
     if (!selectedMember || selectedMember.nom === 'Tous') {
       showToast('Veuillez sélectionner un membre spécifique pour cette opération.', 'error');
       return;
     }
 
     const currentTimestamp = formatBelgianDateTime(new Date());
-    const userMail = currentUser?.email || 'mezitineraires@gmail.com';
+    const verifiedUserMail = currentUser.email;
 
     if (editingOperation) {
       // Update action
@@ -530,7 +519,7 @@ export default function App() {
           membre: selectedMember.nom,
           points: data.points,
           description: data.description,
-          mail: editingOperation.mail || userMail,
+          mail: verifiedUserMail,
           dateOperation: editingOperation.dateOperation || currentTimestamp,
         },
       });
@@ -543,7 +532,7 @@ export default function App() {
           membre: selectedMember.nom,
           points: data.points,
           description: data.description,
-          mail: userMail,
+          mail: verifiedUserMail,
           dateOperation: currentTimestamp,
         },
       });
@@ -556,8 +545,16 @@ export default function App() {
       showToast('Cette opération est validée dans Google Sheets (case cochée en colonne E). Modification verrouillée.', 'error');
       return;
     }
+    if (!currentUser) {
+      showToast('Connectez-vous avec votre compte Google pour modifier une opération.', 'error');
+      return;
+    }
+    if (userPermission && !userPermission.canWrite) {
+      showToast("Votre compte n'a pas les droits d'écriture sur le classeur Google Sheets.", 'error');
+      return;
+    }
+
     setEditingOperation(op);
-    // Find member or set matching name
     const found = membersWithPoints.find((m) => m.nom.toLowerCase() === op.membre.toLowerCase());
     if (found) {
       setSelectedMember(found);
@@ -567,7 +564,6 @@ export default function App() {
         afficherMajManuelle: true,
       });
     }
-    // Scroll smoothly to form
     window.scrollTo({ top: 180, behavior: 'smooth' });
     showToast(`Opération de ${op.membre} rechargée pour modification.`, 'info');
   };
@@ -578,6 +574,15 @@ export default function App() {
       showToast('Cette opération est validée dans Google Sheets (case cochée en colonne E). Suppression verrouillée.', 'error');
       return;
     }
+    if (!currentUser) {
+      showToast('Connectez-vous avec votre compte Google pour supprimer une opération.', 'error');
+      return;
+    }
+    if (userPermission && !userPermission.canWrite) {
+      showToast("Votre compte n'a pas les droits d'écriture sur le classeur Google Sheets.", 'error');
+      return;
+    }
+
     setConfirmationData({
       actionType: 'delete',
       operation: {
@@ -587,7 +592,7 @@ export default function App() {
         membre: op.membre,
         points: op.points,
         description: op.description,
-        mail: op.mail,
+        mail: currentUser.email || op.mail,
         dateOperation: op.dateOperation,
       },
     });
@@ -613,7 +618,6 @@ export default function App() {
       }
 
       if (actionType === 'insert') {
-        let synced = false;
         let assignedRowNumber = operations.length + 2;
 
         if (sheetConfig.appsScriptUrl) {
@@ -626,20 +630,14 @@ export default function App() {
             mail: op.mail,
             dateOperation: op.dateOperation,
           });
-          synced = true;
+
+          if (res?.success === false) {
+            throw new Error(res.error || "Refusé par Google Sheets");
+          }
+
           if (res?.rowNumber && typeof res.rowNumber === 'number') {
             assignedRowNumber = res.rowNumber;
           }
-        } else if (isGoogleConnected && sheetConfig.spreadsheetId) {
-          await insertOperationToSheet(sheetConfig.spreadsheetId, sheetConfig.operationsSheetName, {
-            dateRando: op.dateRando,
-            membre: op.membre,
-            points: op.points,
-            description: op.description,
-            mail: op.mail,
-            dateOperation: op.dateOperation,
-          });
-          synced = true;
         }
 
         const newOpRecord: OperationRecord = {
@@ -654,22 +652,18 @@ export default function App() {
           source: 'WebApp RPA',
           mail: op.mail,
           dateOperation: op.dateOperation,
-          syncedToGoogleSheets: synced,
+          syncedToGoogleSheets: true,
         };
 
         setOperations((prev) => [newOpRecord, ...prev]);
 
         showToast(
-          synced
-            ? `Opération enregistrée dans Points RPA pour ${op.membre} (${op.points > 0 ? '+' : ''}${op.points} pts) !`
-            : `Opération enregistrée en local pour ${op.membre} !`,
+          `Opération enregistrée dans Points RPA pour ${op.membre} (${op.points > 0 ? '+' : ''}${op.points} pts) !`,
           'success'
         );
       } else if (actionType === 'update') {
-        let synced = false;
-
         if (sheetConfig.appsScriptUrl) {
-          await postToAppsScript(sheetConfig.appsScriptUrl, {
+          const res = await postToAppsScript(sheetConfig.appsScriptUrl, {
             action: 'updateOperation',
             rowNumber: op.rowNumber,
             dateRando: op.dateRando,
@@ -679,21 +673,12 @@ export default function App() {
             mail: op.mail,
             dateOperation: op.dateOperation,
           });
-          synced = true;
-        } else if (isGoogleConnected && sheetConfig.spreadsheetId && op.rowNumber) {
-          await updateOperationInSheet(sheetConfig.spreadsheetId, sheetConfig.operationsSheetName, {
-            rowNumber: op.rowNumber,
-            dateRando: op.dateRando,
-            membre: op.membre,
-            points: op.points,
-            description: op.description,
-            mail: op.mail,
-            dateOperation: op.dateOperation,
-          });
-          synced = true;
+
+          if (res?.success === false) {
+            throw new Error(res.error || "Refusé par Google Sheets");
+          }
         }
 
-        // Update in local state
         setOperations((prev) =>
           prev.map((item) =>
             item.id === op.id || (op.rowNumber && item.rowNumber === op.rowNumber)
@@ -703,7 +688,7 @@ export default function App() {
                   points: op.points,
                   description: op.description,
                   mail: op.mail,
-                  syncedToGoogleSheets: synced,
+                  syncedToGoogleSheets: true,
                 }
               : item
           )
@@ -712,20 +697,18 @@ export default function App() {
         setEditingOperation(null);
         showToast('Opération modifiée avec succès dans Points RPA !', 'success');
       } else if (actionType === 'delete') {
-        let synced = false;
-
         if (sheetConfig.appsScriptUrl) {
-          await postToAppsScript(sheetConfig.appsScriptUrl, {
+          const res = await postToAppsScript(sheetConfig.appsScriptUrl, {
             action: 'deleteOperation',
             rowNumber: op.rowNumber,
+            mail: op.mail,
           });
-          synced = true;
-        } else if (isGoogleConnected && sheetConfig.spreadsheetId && op.rowNumber) {
-          await deleteOperationInSheet(sheetConfig.spreadsheetId, sheetConfig.operationsSheetName, op.rowNumber);
-          synced = true;
+
+          if (res?.success === false) {
+            throw new Error(res.error || "Refusé par Google Sheets");
+          }
         }
 
-        // Remove from local state
         setOperations((prev) =>
           prev.filter((item) => item.id !== op.id && (op.rowNumber ? item.rowNumber !== op.rowNumber : true))
         );
@@ -779,6 +762,8 @@ export default function App() {
       <HeaderBanner
         user={currentUser}
         sheetConfig={sheetConfig}
+        userPermission={userPermission}
+        isCheckingPermission={isCheckingPermission}
         isGoogleConnected={isGoogleConnected}
         isSyncing={isSyncing}
         onSignIn={handleSignIn}
@@ -789,36 +774,6 @@ export default function App() {
 
       {/* Main Content Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1 w-full space-y-6 sm:space-y-8">
-        {/* Notice if Google Sheet not yet configured */}
-        {!sheetConfig.spreadsheetId && !sheetConfig.appsScriptUrl && (
-          <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-l-4 border-amber-500 rounded-r-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs bg-white">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-xl bg-amber-100 text-amber-800 shrink-0 mt-0.5">
-                <FileSpreadsheet className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-gray-900">
-                  Liaison avec le classeur Google Sheets « Points RPA »
-                </h3>
-                <p className="text-xs text-gray-600 mt-0.5">
-                  Renseignez l'URL de votre script Apps Script ou connectez votre classeur pour mettre à jour la feuille{' '}
-                  <code className="bg-gray-100 px-1 py-0.5 rounded text-emerald-800 font-semibold">Opérations</code> et charger vos membres.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsSettingsModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow transition-all active:scale-95"
-              >
-                Configurer le Classeur Google
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Section: Saisie Workflow */}
         <section className="bg-white rounded-3xl border border-gray-200/90 shadow-sm p-6 sm:p-8 space-y-6">
           <div className="border-b border-gray-100 pb-4">
@@ -830,11 +785,11 @@ export default function App() {
             <h2 className="text-lg sm:text-xl font-extrabold text-gray-900">
               {isAllMembersSelected
                 ? 'Historique Global des Points Non-FFBC'
-                : 'Saisie d\'une Opération de Points Non-FFBC'}
+                : "Saisie d'une Opération de Points Non-FFBC"}
             </h2>
           </div>
 
-          {/* Member Selector with Search, Pencil icon, and 'Tous' pseudo-member */}
+          {/* Member Selector */}
           <div className="space-y-3">
             <MemberSelector
               members={membersWithPoints}
@@ -867,12 +822,15 @@ export default function App() {
               </div>
             </div>
           ) : currentSelectedMemberWithPoints ? (
-            /* Specific member selected: display the 3 fields underneath */
+            /* Specific member selected: display the fields underneath */
             <div className="pt-2 animate-in fade-in duration-200">
               <OperationForm
                 key={`${currentSelectedMemberWithPoints.nom}-${editingOperation ? editingOperation.id : 'create'}`}
                 member={currentSelectedMemberWithPoints}
                 motifs={motifs}
+                user={currentUser}
+                userPermission={userPermission}
+                onSignIn={handleSignIn}
                 editingOperation={editingOperation}
                 onCancelEdit={() => setEditingOperation(null)}
                 onOpenNewMotifModal={() => setIsNewMotifModalOpen(true)}
@@ -905,6 +863,7 @@ export default function App() {
             selectedMember={selectedMember}
             spreadsheetName={sheetConfig.spreadsheetName}
             isGoogleConnected={isGoogleConnected}
+            canWrite={Boolean(currentUser && userPermission?.canWrite)}
             onEditOperation={handleEditOperation}
             onDeleteOperation={handleDeleteOperation}
             onSelectMemberFilter={(nom) => {
@@ -960,14 +919,17 @@ export default function App() {
       <SpreadsheetSettingsModal
         isOpen={isSettingsModalOpen}
         config={sheetConfig}
+        user={currentUser}
+        userPermission={userPermission}
+        isCheckingPermission={isCheckingPermission}
         onClose={() => setIsSettingsModalOpen(false)}
         onSaveConfig={(newConfig) => {
           setSheetConfig(newConfig);
-          showToast('Configuration Google Sheets enregistrée.', 'success');
+          showToast('Configuration enregistrée.', 'success');
         }}
-        onLoadDemoData={handleLoadDemoData}
-        isGoogleConnected={isGoogleConnected}
         onSignIn={handleSignIn}
+        onSignOut={handleSignOut}
+        onRecheckPermission={() => checkPermissions(currentUser)}
       />
 
       {/* Footer */}

@@ -20,9 +20,10 @@ const safeConfig = {
 const app = getApps().length === 0 ? initializeApp(safeConfig) : getApp();
 export const auth = getAuth(app);
 
-// Configure Google OAuth provider with Google Sheets scope
+// Configure Google OAuth provider with standard profile & email scopes
 export const provider = new GoogleAuthProvider();
-provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+provider.addScope('email');
+provider.addScope('profile');
 
 // Force account selector modal so user can choose ANY account (e.g., dedicated RPA Google account)
 provider.setCustomParameters({
@@ -31,7 +32,6 @@ provider.setCustomParameters({
 
 // Flag to indicate if we are in the middle of a sign-in flow
 let isSigningIn = false;
-// In-memory cache for OAuth access token (per security guidelines, not in localStorage)
 let cachedAccessToken: string | null = null;
 
 export const initAuth = (
@@ -40,12 +40,7 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        // Token not yet retrieved or expired in memory; app can prompt login when needed
-        if (onAuthFailure) onAuthFailure();
-      }
+      if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken || '');
     } else {
       cachedAccessToken = null;
       if (onAuthFailure) onAuthFailure();

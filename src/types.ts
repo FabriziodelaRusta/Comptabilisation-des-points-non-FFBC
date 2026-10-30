@@ -29,15 +29,22 @@ export interface OperationRecord {
   syncedToGoogleSheets?: boolean;
 }
 
+export interface UserPermission {
+  canWrite: boolean;
+  role: 'OWNER' | 'EDITOR' | 'EDITOR_MEMBER' | 'VIEWER' | 'NONE' | 'FALLBACK' | 'ERROR';
+  email?: string;
+  reason?: string;
+  warning?: string;
+}
+
 export interface SheetConfig {
-  spreadsheetId: string;
+  spreadsheetId?: string;
   spreadsheetName?: string;
-  membresSheetName: string;
-  keysSheetName: string;
-  operationsSheetName: string;
+  membresSheetName?: string;
+  keysSheetName?: string;
+  operationsSheetName?: string;
   isCustomConfigured: boolean;
-  appsScriptUrl?: string;
-  syncMode?: 'oauth' | 'apps_script' | 'demo';
+  appsScriptUrl: string;
 }
 
 export interface UserProfile {

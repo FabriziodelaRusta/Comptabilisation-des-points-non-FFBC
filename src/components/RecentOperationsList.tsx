@@ -28,6 +28,7 @@ interface RecentOperationsListProps {
   selectedMember: Member | null;
   spreadsheetName?: string;
   isGoogleConnected: boolean;
+  canWrite?: boolean;
   onEditOperation: (op: OperationRecord) => void;
   onDeleteOperation: (op: OperationRecord) => void;
   onSelectMemberFilter?: (nom: string) => void;
@@ -42,6 +43,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
   selectedMember,
   spreadsheetName,
   isGoogleConnected,
+  canWrite = true,
   onEditOperation,
   onDeleteOperation,
   onSelectMemberFilter,
@@ -234,22 +236,17 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                   </div>
                 </th>
 
-                {/* 5. Validation (Col E) */}
-                <th className="px-3.5 py-3 text-center whitespace-nowrap">
-                  <span>Validé (Col E)</span>
-                </th>
-
-                {/* 6. Source (Col F) */}
+                {/* 5. Source (Col F) */}
                 <th className="px-3.5 py-3 whitespace-nowrap">
                   <span>Source</span>
                 </th>
 
-                {/* 7. Mail Connexion (Col G) */}
+                {/* 6. Mail Connexion (Col G) */}
                 <th className="px-3.5 py-3">
                   <span>Mail connexion</span>
                 </th>
 
-                {/* 8. Date Opération with sort (Col H) */}
+                {/* 7. Date Opération with sort (Col H) */}
                 <th
                   onClick={() => handleSort('dateOperation')}
                   className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
@@ -260,7 +257,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                   </div>
                 </th>
 
-                {/* 9. Actions */}
+                {/* 8. Actions */}
                 <th className="px-3.5 py-3 text-right">
                   <span>Actions</span>
                 </th>
@@ -305,26 +302,6 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                       {op.description}
                     </td>
 
-                    {/* Col E : Statut de validation */}
-                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
-                      {op.isChecked ? (
-                        <span
-                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs"
-                          title="Opération validée dans Google Sheets (case cochée en colonne E). Modification et suppression verrouillées."
-                        >
-                          <Lock className="w-3 h-3 text-emerald-700 shrink-0" />
-                          <span>Validé</span>
-                        </span>
-                      ) : (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-gray-100 text-gray-500 border border-gray-200"
-                          title="Case non cochée dans Google Sheets : modifiable et supprimable"
-                        >
-                          <span>En attente</span>
-                        </span>
-                      )}
-                    </td>
-
                     <td className="px-3.5 py-3 whitespace-nowrap">
                       <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
                         {op.source || 'WebApp RPA'}
@@ -356,16 +333,18 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            if (!op.isChecked) onEditOperation(op);
+                            if (!op.isChecked && canWrite) onEditOperation(op);
                           }}
-                          disabled={op.isChecked}
+                          disabled={op.isChecked || !canWrite}
                           title={
                             op.isChecked
                               ? 'Opération validée (case cochée en colonne E) : modification verrouillée.'
+                              : !canWrite
+                              ? "Action désactivée : votre compte Google n'a pas les droits d'écriture (Éditeur) sur le classeur."
                               : 'Modifier cette opération (recharger dans le formulaire)'
                           }
                           className={`p-1.5 rounded-lg border transition-colors ${
-                            op.isChecked
+                            op.isChecked || !canWrite
                               ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
                               : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border-emerald-200'
                           }`}
@@ -376,16 +355,18 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            if (!op.isChecked) onDeleteOperation(op);
+                            if (!op.isChecked && canWrite) onDeleteOperation(op);
                           }}
-                          disabled={op.isChecked}
+                          disabled={op.isChecked || !canWrite}
                           title={
                             op.isChecked
                               ? 'Opération validée (case cochée en colonne E) : suppression verrouillée.'
+                              : !canWrite
+                              ? "Action désactivée : votre compte Google n'a pas les droits d'écriture (Éditeur) sur le classeur."
                               : 'Supprimer cette opération'
                           }
                           className={`p-1.5 rounded-lg border transition-colors ${
-                            op.isChecked
+                            op.isChecked || !canWrite
                               ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
                               : 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border-red-200'
                           }`}

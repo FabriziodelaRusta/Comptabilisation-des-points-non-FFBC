@@ -6,15 +6,19 @@ import {
   CheckCircle2,
   AlertCircle,
   Settings,
-  Sparkles,
   RefreshCw,
   ExternalLink,
+  ShieldCheck,
+  ShieldAlert,
+  Loader2,
 } from 'lucide-react';
-import { UserProfile, SheetConfig } from '../types';
+import { UserProfile, SheetConfig, UserPermission } from '../types';
 
 interface HeaderBannerProps {
   user: UserProfile | null;
   sheetConfig: SheetConfig;
+  userPermission: UserPermission | null;
+  isCheckingPermission?: boolean;
   isGoogleConnected: boolean;
   isSyncing: boolean;
   onSignIn: () => void;
@@ -26,6 +30,8 @@ interface HeaderBannerProps {
 export const HeaderBanner: React.FC<HeaderBannerProps> = ({
   user,
   sheetConfig,
+  userPermission,
+  isCheckingPermission,
   isGoogleConnected,
   isSyncing,
   onSignIn,
@@ -39,42 +45,22 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
       <div className="bg-emerald-950/70 px-4 py-1.5 text-xs border-b border-emerald-700/40 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-emerald-300 text-[11px]">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>Connexion directe Google Apps Script (Méthode B)</span>
+          <span>Authentification Google & Droits d'écriture RW</span>
         </div>
 
         <div className="flex items-center gap-2.5">
-          {sheetConfig.appsScriptUrl ? (
-            <span className="text-emerald-200 bg-emerald-900/90 border border-emerald-600/70 px-2 py-0.5 rounded-lg flex items-center gap-1.5 text-[11px]">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-              <strong className="text-white">Points RPA</strong>
-              <span className="text-emerald-300 text-[10px] hidden sm:inline">(Script gs actif)</span>
-            </span>
-          ) : sheetConfig.spreadsheetId ? (
-            <a
-              href={`https://docs.google.com/spreadsheets/d/${sheetConfig.spreadsheetId}/edit`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-emerald-300 hover:text-white flex items-center gap-1 text-[11px] transition-colors bg-emerald-900/60 px-2 py-0.5 rounded-lg border border-emerald-700/60"
-              title="Ouvrir le classeur Points RPA dans un nouvel onglet"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-              <strong className="text-white">{sheetConfig.spreadsheetName || 'Points RPA'}</strong>
-              <ExternalLink className="w-3 h-3 opacity-70 ml-0.5" />
-            </a>
-          ) : (
-            <span className="text-amber-300/95 flex items-center gap-1 text-[11px] bg-amber-950/40 px-2 py-0.5 rounded-lg border border-amber-800/40">
-              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-              <strong className="text-amber-200">Points RPA</strong>
-              <span className="text-amber-300/70 text-[10px] hidden sm:inline">(En attente URL script gs)</span>
-            </span>
-          )}
+          <span className="text-emerald-200 bg-emerald-900/90 border border-emerald-600/70 px-2 py-0.5 rounded-lg flex items-center gap-1.5 text-[11px]">
+            <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
+            <strong className="text-white">Points RPA</strong>
+            <span className="text-emerald-300 text-[10px] hidden sm:inline">(Google Sheets)</span>
+          </span>
 
           <button
             onClick={onOpenSettings}
-            className="text-emerald-200 hover:text-white flex items-center gap-1 text-[11px] bg-emerald-800/80 hover:bg-emerald-700 px-2 py-0.5 rounded transition-colors"
+            className="text-emerald-200 hover:text-white flex items-center gap-1 text-[11px] bg-emerald-800/80 hover:bg-emerald-700 px-2.5 py-0.5 rounded-lg transition-colors border border-emerald-700/60"
           >
             <Settings className="w-3 h-3" />
-            <span>Feuille Google</span>
+            <span>Réglages & Permissions</span>
           </button>
         </div>
       </div>
@@ -105,8 +91,9 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
                   <span>Comptabilisation des Points Non FFBC</span>
                 </h1>
-                <span className="bg-emerald-700/80 text-emerald-200 text-xs px-2 py-0.5 rounded-full font-medium border border-emerald-600/60">
-                  v2.5 Méthode B
+                <span className="bg-emerald-700/80 text-emerald-200 text-xs px-2.5 py-0.5 rounded-full font-medium border border-emerald-600/60 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-amber-400" />
+                  <span>Accès Sécurisé Drive</span>
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-emerald-100/95 mt-1 max-w-3xl leading-relaxed">
@@ -127,7 +114,7 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
             </button>
 
-            {/* Google Authentication Status */}
+            {/* Google Authentication Status with RW Badge */}
             {isGoogleConnected && user ? (
               <div className="flex items-center gap-2 bg-emerald-950/80 border border-emerald-700/80 rounded-xl px-3 py-1.5 shadow-inner">
                 {user.photoURL ? (
@@ -142,11 +129,18 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
                   </div>
                 )}
                 <div className="text-left hidden sm:block">
-                  <div className="text-xs font-semibold text-white truncate max-w-[140px]">
-                    {user.displayName || 'Connecté'}
+                  <div className="text-xs font-semibold text-white truncate max-w-[140px] flex items-center gap-1">
+                    <span>{user.displayName || 'Connecté'}</span>
+                    {isCheckingPermission ? (
+                      <Loader2 className="w-2.5 h-2.5 animate-spin text-amber-400" />
+                    ) : userPermission?.canWrite ? (
+                      <span title="Éditeur autorisé sur le classeur" className="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+                    ) : (
+                      <span title="Lecture seule (Pas accès éditeur sur le classeur)" className="inline-block w-2 h-2 rounded-full bg-amber-400"></span>
+                    )}
                   </div>
                   <div className="text-[10px] text-emerald-300 truncate max-w-[140px]" title={user.email || ''}>
-                    {user.email || 'Compte Google'}
+                    {userPermission?.canWrite ? 'Éditeur RW validé' : 'Lecture seule'}
                   </div>
                 </div>
                 <button
@@ -180,7 +174,7 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
-                <span>Connexion Google (Sheets)</span>
+                <span>Connexion Google</span>
               </button>
             )}
           </div>

@@ -12,12 +12,17 @@ import {
   X,
   CheckCircle,
   RotateCcw,
+  ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react';
-import { Member, MotifKey, OperationRecord } from '../types';
+import { Member, MotifKey, OperationRecord, UserProfile, UserPermission } from '../types';
 
 interface OperationFormProps {
   member: Member;
   motifs: MotifKey[];
+  user?: UserProfile | null;
+  userPermission?: UserPermission | null;
+  onSignIn?: () => void;
   editingOperation?: OperationRecord | null;
   onCancelEdit?: () => void;
   onOpenNewMotifModal: () => void;
@@ -33,6 +38,9 @@ interface OperationFormProps {
 export const OperationForm: React.FC<OperationFormProps> = ({
   member,
   motifs,
+  user,
+  userPermission,
+  onSignIn,
   editingOperation,
   onCancelEdit,
   onOpenNewMotifModal,
@@ -460,6 +468,35 @@ export const OperationForm: React.FC<OperationFormProps> = ({
         </div>
       </div>
 
+      {/* Banner if Google not connected or not authorized in write mode */}
+      {!user ? (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Connexion Google requise pour enregistrer ou modifier des points dans le classeur RPA.</span>
+          </div>
+          {onSignIn && (
+            <button
+              type="button"
+              onClick={onSignIn}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs self-start sm:self-auto active:scale-95 transition-all"
+            >
+              Se connecter avec Google
+            </button>
+          )}
+        </div>
+      ) : userPermission && !userPermission.canWrite ? (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex items-start gap-2">
+          <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-bold text-amber-900">Droits d'écriture non accordés (Mode lecture seule)</div>
+            <p className="text-[11px] text-amber-800 mt-0.5">
+              Votre compte Google <strong>{user.email}</strong> n'est pas configuré comme Éditeur sur le classeur « Points RPA ». Demandez à l'administrateur de vous ajouter via le bouton « Partager » du fichier Google Sheets.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {/* Footer / Submit bar */}
       <div className="pt-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -489,11 +526,20 @@ export const OperationForm: React.FC<OperationFormProps> = ({
             type="submit"
             disabled={
               isLoading ||
+              !user ||
+              (userPermission && !userPermission.canWrite) ||
               !(description || '').trim() ||
               points === '' ||
               points === 0 ||
               isNaN(Number(points)) ||
               !dateRando
+            }
+            title={
+              !user
+                ? 'Veuillez vous connecter avec Google pour enregistrer.'
+                : userPermission && !userPermission.canWrite
+                ? "Votre compte n'a pas les droits d'écriture sur le classeur Google Sheets."
+                : undefined
             }
             className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
               editingOperation

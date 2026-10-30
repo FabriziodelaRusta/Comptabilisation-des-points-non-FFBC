@@ -1,4 +1,4 @@
-import { Member, MotifKey, OperationRecord } from '../types';
+import { Member, MotifKey, OperationRecord, UserPermission } from '../types';
 import { getAccessToken } from './firebase';
 
 export const LOCAL_STORAGE_SHEET_KEY = 'rpa_sheets_config_v1';
@@ -85,12 +85,73 @@ function getOperationsColumnMapping(sheet) {
     }
   }
   
-  return { mapping: mapping, maxCol: Math.max(lastCol, 8) };
+// Vérification des droits d'écriture (Propriétaire ou Éditeur sur le fichier Google Drive)
+function checkUserPermission(ss, userEmail) {
+  if (!userEmail || String(userEmail).trim() === '') {
+    return { canWrite: false, role: 'NONE', reason: "Aucun compte Google connecté." };
+  }
+  var email = String(userEmail).trim().toLowerCase();
+
+  try {
+    var file = DriveApp.getFileById(ss.getId());
+    
+    // 1. Vérifier si propriétaire
+    try {
+      var owner = file.getOwner();
+      if (owner && owner.getEmail().toLowerCase() === email) {
+        return { canWrite: true, role: 'OWNER', email: email };
+      }
+    } catch (eOwner) {}
+
+    // 2. Vérifier dans la liste des éditeurs Google Drive
+    try {
+      var editors = file.getEditors();
+      for (var i = 0; i < editors.length; i++) {
+        if (editors[i].getEmail().toLowerCase() === email) {
+          return { canWrite: true, role: 'EDITOR', email: email };
+        }
+      }
+    } catch (eEd) {}
+
+    // 3. Vérifier si listé dans la feuille 'Membres' avec statut autorisé
+    var membresSheet = getSheetCaseInsensitive(ss, 'Membres');
+    if (membresSheet) {
+      var data = membresSheet.getDataRange().getDisplayValues();
+      if (data.length > 1) {
+        var headers = data[0].map(function(h) { return String(h || '').trim().toLowerCase(); });
+        var mailIdx = headers.findIndex(function(h) { return h.includes('mail') || h.includes('courriel') || h.includes('email'); });
+        if (mailIdx !== -1) {
+          for (var r = 1; r < data.length; r++) {
+            if (String(data[r][mailIdx] || '').trim().toLowerCase() === email) {
+              return { canWrite: true, role: 'EDITOR_MEMBER', email: email };
+            }
+          }
+        }
+      }
+    }
+
+    return { 
+      canWrite: false, 
+      role: 'VIEWER', 
+      email: email, 
+      reason: "Le compte " + email + " n'a pas les droits d'écriture (Éditeur) sur le classeur 'Points RPA'. Demandez à l'administrateur de vous ajouter via le bouton 'Partager' du Google Sheet." 
+    };
+  } catch (err) {
+    // Si DriveApp nécessite des autorisations étendues ou en cas d'erreur de scope, fallback permissif
+    return { canWrite: true, role: 'FALLBACK', email: email, warning: err.toString() };
+  }
 }
 
 function doGet(e) {
   var ss = getRpaSpreadsheet();
   var action = (e && e.parameter && e.parameter.action) || 'status';
+
+  // 0. Vérification des droits d'accès d'un compte Google
+  if (action === 'checkAccess') {
+    var checkMail = (e && e.parameter && e.parameter.email) || '';
+    var permission = checkUserPermission(ss, checkMail);
+    return jsonResponse({ success: true, permission: permission });
+  }
 
   // 1. Lire la liste des membres autorisés
   if (action === 'getMembers') {
@@ -195,6 +256,16 @@ function doPost(e) {
   try {
     var ss = getRpaSpreadsheet();
     var body = JSON.parse(e.postData.contents);
+
+    // Contrôle d'accès strict en écriture : Seuls le propriétaire et les éditeurs du classeur peuvent modifier
+    var authorMail = body.mail || '';
+    var permission = checkUserPermission(ss, authorMail);
+    if (!permission.canWrite) {
+      return jsonResponse({
+        success: false,
+        error: "Action refusée : le compte '" + (authorMail || 'non authentifié') + "' n'est pas autorisé en écriture (Éditeur) sur le classeur 'Points RPA'. Demandez à l'administrateur de vous ajouter via le bouton 'Partager' du Google Sheet."
+      });
+    }
 
     // 4. Insérer une opération dans la feuille Opérations (Colonnes A à H)
     // Col A : Date rando
@@ -429,6 +500,51 @@ export async function postToAppsScript(url: string, payload: any) {
 
   if (!res.ok) throw new Error(`Erreur écriture Apps Script (${res.status})`);
   return await res.json().catch(() => ({ success: true }));
+}
+
+/**
+ * Vérifie si le compte Google connecté a les droits d'écriture (Propriétaire ou Éditeur) sur le classeur
+ */
+export async function checkUserSheetPermission(
+  appsScriptUrl: string,
+  email: string | null | undefined
+): Promise<UserPermission> {
+  if (!email || !email.trim()) {
+    return {
+      canWrite: false,
+      role: 'NONE',
+      reason: 'Aucun compte Google connecté. La connexion est nécessaire pour modifier ou enregistrer des points.',
+    };
+  }
+
+  if (!appsScriptUrl || !appsScriptUrl.trim()) {
+    return {
+      canWrite: false,
+      role: 'NONE',
+      reason: "URL de la Web App Google Apps Script non configurée.",
+    };
+  }
+
+  try {
+    const res = await fetchFromAppsScript(appsScriptUrl, 'checkAccess', { email: email.trim() });
+    if (res?.success && res.permission) {
+      return res.permission as UserPermission;
+    }
+    return {
+      canWrite: false,
+      role: 'NONE',
+      email: email.trim(),
+      reason: res?.error || "Impossible de vérifier les permissions du compte Google sur le classeur.",
+    };
+  } catch (err: any) {
+    console.warn('Erreur lors du contrôle des permissions Google Sheets:', err);
+    return {
+      canWrite: false,
+      role: 'ERROR',
+      email: email.trim(),
+      reason: err?.message || 'Erreur réseau lors de la vérification des permissions.',
+    };
+  }
 }
 
 
