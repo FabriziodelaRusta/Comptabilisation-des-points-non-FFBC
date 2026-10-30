@@ -1,0 +1,792 @@
+firefox ne reponds plus,j'ai une webapp qui affiche network error cors ... lorsque j'aissie un bouton coonecter compte google
+Le message "Network Error" associé à CORS lors d'une tentative de connexion avec Google indique généralement que votre application web tente de faire une requête vers l'API de Google, mais que le navigateur (Firefox) bloque cette requête pour des raisons de sécurité, ou que Firefox a planté en gérant le processus.
+Voici comment résoudre ce problème étape par étape, selon que vous êtes utilisateur ou développeur de cette application.
+
+🛠️ Si vous êtes utilisateur (Solutions rapides)
+
+Si l'application fonctionnait avant et que Firefox a planté, le problème vient probablement d'un conflit local ou d'un cache corrompu.
+1. Forcer le redémarrage de Firefox
+Si Firefox ne répond plus du tout, fermez-le de force :
+	• Windows : Ctrl + Shift + Esc (Gestionnaire des tâches) -> Clic droit sur Firefox -> Fin de tâche.
+	• Mac : Cmd + Option + Esc -> Sélectionnez Firefox -> Forcer à quitter.
+	• Relancez ensuite Firefox.
+2. Tester en mode de navigation privée
+	• Ouvrez une fenêtre privée (Ctrl + Shift + P ou Cmd + Shift + P).
+	• Essayez de vous connecter. Si cela fonctionne, le problème vient de vos extensions (comme un bloqueur de pubs type uBlock Origin, Privacy Badger) ou de vos cookies/cache.
+3. Vider le cache et les cookies pour ce site
+	• Cliquez sur le cadenas à gauche de l'URL du site.
+	• Choisissez Effacer les cookies et les données du site.
+	• Actualisez la page et réessayez.
+4. Désactiver la protection renforcée contre le pistage
+Firefox intègre une protection stricte qui bloque parfois les scripts de connexion tiers (comme Google Login).
+	• Cliquez sur l'icône de bouclier à gauche de la barre d'adresse.
+	• Désactivez l'interrupteur pour ce site spécifique.
+
+💻 Si vous êtes le développeur de la Webapp
+
+L'erreur CORS (Cross-Origin Resource Sharing) signifie que votre application tente de contacter un domaine (Google) sans y être explicitement autorisée, ou que la configuration de votre flux d'authentification a un problème.
+
+1. Mauvaise implémentation du bouton Google Login
+
+Vous ne devez jamais faire une requête fetch() ou axios.get() directe vers l'URL d'authentification de Google (ex: https://google.com...). Cela déclenchera systématiquement une erreur CORS car Google bloque les requêtes XMLHttpRequest/Fetch directes sur ses points d'accès OAuth.
+• La solution : Vous devez utiliser la bibliothèque officielle de Google (Google Identity Services SDK) qui gère cela via une redirection ou une invite pop-up sécurisée, ou rediriger directement le navigateur de l'utilisateur (window.location.href = URL_GOOGLE).
+
+2. Configurer les Origines Autorisées dans la console Google Cloud
+
+Si vous utilisez le SDK Google, assurez-vous que l'URL de votre application est déclarée :
+1. Allez sur la Google Cloud Console.
+2. Accédez à API et services > Identifiants.
+3. Cliquez sur votre ID de client OAuth 2.0.
+4. Dans la section Origines JavaScript autorisées, ajoutez l'URL exacte de votre application (ex: http://localhost:3000 ou https://mon-application.com).
+5. Dans URI de redirection autorisés, ajoutez l'URL de callback de votre application.
+
+3. Problème de proxy ou de backend
+
+Si votre frontend passe par votre propre serveur backend pour s'authentifier auprès de Google :
+• Assurez-vous que votre backend renvoie les bons en-têtes CORS à votre frontend (Access-Control-Allow-Origin).
+Pour vous aider au mieux, s'agit-il d'une application que vous développez ou d'un site que vous visitez ? Si vous la développez, quel framework (React, Angular, Next.js...) ou méthode utilisez-vous pour la connexion Google ?
+Les réponses de l'IA peuvent contenir des erreurs. En savoir plus
+
+sur linux mint
+
+Sur Linux Mint, le fait que Firefox ne réponde plus combiné à cette erreur CORS montre que le navigateur s'est bloqué, souvent à cause d'un processus parent figé ou d'un profil corrompu qui bloque l'ouverture des fenêtres pop-up d'authentification Google.
+Voici comment débloquer Firefox et corriger le problème spécifiquement sur Linux Mint.
+
+1. Forcer la fermeture de Firefox (si l'interface est gelée)
+
+Si Firefox refuse de se fermer, ouvrez votre terminal (Ctrl + Alt + T) et tuez tous les processus Firefox en cours avec cette commande :
+bash
+killall -9 firefox
+Utilisez le code avec précaution.
+Si vous utilisez la version Flatpak de Firefox (courante sur les versions récentes de Mint), utilisez plutôt :
+bash
+flatpak kill org.mozilla.firefox
+Utilisez le code avec précaution.
+
+2. Gérer le problème de pop-up sous Linux Mint
+
+La connexion Google ouvre généralement une fenêtre pop-up. Si Firefox la bloque ou plante en essayant de l'ouvrir :
+• Désactivez les bloqueurs : Si vous utilisez des extensions comme uBlock Origin, désactivez-les temporairement pour ce site.
+• Autoriser les fenêtres pop-up : Dans Firefox, allez dans Paramètres > Vie privée et sécurité > Défilez jusqu'à Permissions > Décochez temporairement Bloquer les fenêtres popup ou ajoutez le site en exception.
+
+3. Nettoyer le cache de Firefox
+
+Un cache corrompu sous Linux peut provoquer des erreurs réseau (Network Error) inattendues.
+1. Relancez Firefox.
+2. Appuyez sur Ctrl + Shift + Delete pour ouvrir la fenêtre de nettoyage.
+3. Sélectionnez Tout dans l'intervalle à effacer.
+4. Cochez Cache et Cookies, puis validez.
+
+4. Si vous êtes Développeur sur Linux Mint (Localhost)
+
+Si cette webapp tourne sur votre propre machine (ex: http://localhost:3000) :
+• Erreur CORS Google : Rappelez-vous que Google interdit les requêtes directes en fetch() ou axios() vers ses endpoints de connexion. Vous devez utiliser leur SDK ou faire une redirection brute (window.location.href).
+• HTTPS obligatoire en production : Google refuse parfois les flux d'authentification hors localhost s'ils ne sont pas sécurisés en HTTPS.
+Dites-moi :
+• Est-ce que Firefox a redémarré correctement après le killall ?
+• S'agit-il d'un site web public ou d'un projet que vous développez vous-même en local ?
+Les réponses de l'IA peuvent contenir des erreurs. En savoir plus
+
+projet developpe avec aistudio
+
+Puisque vous développez votre projet avec AI Studio (Google AI Studio pour l'API Gemini), l'erreur CORS Network Error s'explique parfaitement.
+Par défaut, Google bloque toutes les requêtes directes (fetch, axios, etc.) faites depuis un navigateur web (le frontend) vers les API de Gemini (https://googleapis.com...) pour des raisons de sécurité évidentes. Si vous mettez votre clé API directement dans le code de votre application web, n'importe quel utilisateur pourrait vous la voler.
+Voici comment résoudre ce problème et ce qui a fait planter Firefox.
+
+1. Pourquoi Firefox a planté
+
+Lorsque vous tentez de vous connecter à votre compte Google via votre application et que l'API de Google bloque la requête à cause du CORS, l'application peut entrer dans une boucle infinie de tentatives de reconnexion ou tenter d'ouvrir une pop-up d'authentification qui échoue en arrière-plan. Sous Linux Mint, cela s'est traduit par un gel complet du processus Firefox.
+• N'oubliez pas d'exécuter killall -9 firefox (ou la commande Flatpak) dans votre terminal pour bien nettoyer les processus plantés avant de continuer.
+
+2. La solution de développement : Utiliser un Proxy / Backend (Recommandé)
+
+Pour intégrer AI Studio / Gemini de manière sécurisée et éviter les erreurs CORS, vous ne devez pas appeler l'API Google directement depuis votre interface (React, Vue, HTML/JS pur). Vous devez passer par un serveur intermédiaire (Backend).
+[ Votre Frontend (Firefox) ] 
+       │
+       ▼ (Requête interne vers votre propre serveur)
+[ Votre Backend (Node.js, Python, Flask, etc.) ] ──🔑 Clé API sécurisée ici
+       │
+       ▼ (Requête de serveur à serveur - Pas de CORS !)
+[ API Google AI Studio / Gemini ]
+Pourquoi cela règle le problème ? Le CORS est une sécurité imposée uniquement par les navigateurs web (comme Firefox). Une requête envoyée depuis un serveur (Node.js, Python) vers Google n'est jamais soumise au CORS.
+
+3. La solution rapide pour tester (Uniquement en Local)
+
+Si vous êtes en phase de prototypage rapide et que vous voulez absolument que votre code frontend communique directement avec AI Studio sans créer de backend, vous devez contourner la sécurité CORS de Firefox temporairement.
+⚠️ Attention : Ne faites jamais cela en production, car votre clé API Google sera visible par tout le monde.
+
+Option A : Utiliser une extension Firefox de contournement CORS
+
+1. Cherchez et installez l'extension CORS Everywhere ou Allow CORS dans les modules complémentaires de Firefox.
+2. Activez l'extension (l'icône devient généralement verte).
+3. Réessayez votre bouton de connexion / appel AI Studio. L'extension va forcer Firefox à accepter la réponse de Google.
+
+Option B : Lancer Firefox avec la sécurité désactivée via le terminal de Linux Mint
+
+Ouvrez un terminal (Ctrl + Alt + T) et lancez une instance spéciale de Firefox en désactivant temporairement les restrictions :
+bash
+firefox -disable-web-security &
+Utilisez le code avec précaution.
+
+4. Vérification dans la console Google Cloud / AI Studio
+
+Si votre bouton sert à connecter le compte Google de l'utilisateur (OAuth2) pour utiliser AI Studio :
+1. Rendez-vous sur votre Google Cloud Console.
+2. Vérifiez que votre projet lié à AI Studio possède bien les Identifiants OAuth 2.0 configurés.
+3. Dans les paramètres de cet identifiant, assurez-vous d'avoir ajouté votre adresse locale (ex: http://localhost:3000 ou http://127.0.0.1:5500) dans la section Origines JavaScript autorisées.
+Pour vous donner le code exact ou la configuration requise :
+• Quel langage ou framework (ex: React, Node.js, Python, HTML/JavaScript pur) utilisez-vous pour votre application ?
+• Est-ce que le bouton sert à authentifier l'utilisateur avec son propre compte Google, ou simplement à activer la clé API Gemini de votre projet ?
+Les réponses de l'IA peuvent contenir des erreurs. En savoir plus
+
+pour une webapp aistudio me donne ceci
+La solution est désormais entièrement implémentée et le code a été nettoyé de tous les éléments superflus :
+1. Fonctionnement de la solution unifiée
+
+    Authentification Google en 1 clic :
+
+        L'utilisateur se connecte avec son compte Google. La session reste mémorisée entre les actualisations du navigateur.
+
+        Le profil et l'adresse e-mail officielle sont automatiquement récupérés.
+
+    Contrôle automatique des droits RW sur le classeur « Points RPA » :
+
+        Dès la connexion, l'application interroge le script Apps Script via l'action checkAccess pour vérifier si le compte connecté est Propriétaire ou Éditeur du classeur Google Drive.
+
+        Si autorisé (Éditeur / Propriétaire) : un badge vert « Éditeur RW validé » apparaît, les formulaires de saisie et les boutons d'action sont actifs, et l'e-mail certifié est inscrit en colonne G.
+
+        Si non connecté ou non autorisé : un message clair avertit l'utilisateur (« Mode lecture seule : demandez à l'administrateur de vous ajouter via le bouton Partager du Google Sheet »), et les boutons d'enregistrement, modification et suppression sont verrouillés.
+
+        Protection côté serveur : le script Apps Script rejette également toute tentative de requête si l'e-mail n'a pas les droits d'écriture sur le fichier Google Drive.
+
+est ce dangereux
+
+Non, cette architecture n'est pas dangereuse, elle est même très bien conçue et respecte les bonnes pratiques de sécurité pour une application qui interagit avec l'écosystème Google (Google Sheets / Drive).
+Le fait que l'application utilise Google Apps Script comme passerelle (backend) pour vérifier les droits est la clé de la sécurité ici.
+Voici l'analyse des risques et pourquoi cette solution est robuste :
+
+1. Pourquoi c'est sécurisé (Les points forts)
+
+• La protection côté serveur (Le point le plus critique) : Le texte mentionne que « le script Apps Script rejette également toute tentative de requête si l'e-mail n'a pas les droits d'écriture ». C'est parfait. Même si un utilisateur malveillant modifiait le code HTML/JS dans Firefox pour forcer le badge vert et débloquer les boutons (ce qui est facile à faire côté client), ses requêtes d'écriture seraient bloquées par le serveur Google Apps Script.
+• Pas de clé API partagée : L'authentification repose sur le compte Google de l'utilisateur (OAuth2). Vous ne stockez aucune clé secrète ou mot de passe dans le code de votre application.
+• Héritage des droits Drive : Vous n'avez pas à gérer une base de données d'utilisateurs. Si vous voulez donner l'accès à quelqu'un, vous utilisez simplement le bouton "Partager" natif du Google Sheet.
+
+2. Le seul point de vigilance : L'erreur CORS et le plantage de Firefox
+
+Puisque cette architecture est sûre, pourquoi votre Firefox a-t-il planté avec une erreur CORS au début ?
+Le problème vient très probablement de la manière dont votre Webapp (le frontend) appelle le script Google Apps Script ou l'authentification Google :
+1. Pour l'authentification : Si le code fait un fetch() direct vers l'URL Google au lieu d'ouvrir le pop-up officiel de connexion, Firefox bloque la requête (CORS) et l'application plante.
+2. Pour le script Apps Script : Lorsque vous publiez un Google Apps Script en tant que "Web App", il génère une URL (qui se termine par /exec). Pour éviter les erreurs CORS lors d'un fetch() depuis votre application vers cette URL, le code de votre script Apps Script doit impérativement renvoyer les données sous forme de ContentService avec une redirection gérée correctement par Google.
+
+Ce qu'il faut vérifier pour que tout fonctionne sans planter :
+
+Dans votre code Google Apps Script, la fonction qui répond à votre Webapp (probablement doGet(e) ou doPost(e)) doit retourner la réponse sous cette forme pour autoriser le navigateur à lire le résultat :
+javascript
+function doGet(e) {
+  // ... votre logique de vérification checkAccess ...
+  
+  var resultat = { access: "authorized", email: userEmail };
+  
+  // Formatage obligatoire pour éviter les erreurs CORS dans le navigateur
+  return ContentService.createTextOutput(JSON.stringify(resultat))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+Utilisez le code avec précaution.
+Pour valider définitivement la sécurité et résoudre le plantage :
+• Pouvez-vous me montrer la ligne de code JavaScript dans votre Webapp qui s'exécute lorsque vous cliquez sur le bouton "Connecter compte Google" ?
+• Comment le script Apps Script a-t-il été publié (Exécuté en tant que : "Moi" ou "L'utilisateur accédant à l'application web") ?
+Les réponses de l'IA peuvent contenir des erreurs. En savoir plus
+
+dans quel fichier cela se trouve t il
+
+Ce code se trouve obligatoirement dans votre projet Google Apps Script, et non pas dans les fichiers locaux de votre ordinateur (comme votre fichier index.html ou script.js).
+Voici précisément où le trouver et comment y accéder :
+
+1. Où est ce fichier ?
+
+Il est hébergé directement sur les serveurs de Google, lié soit à votre compte Google Drive, soit directement attaché à votre fichier Google Sheets (« Points RPA »).
+
+2. Comment y accéder ?
+
+Il y a deux méthodes pour ouvrir l'éditeur de code selon la façon dont le projet a été créé :
+• Méthode A (La plus probable) : Depuis votre fichier Google Sheets
+	1. Ouvrez votre classeur Google Sheet nommé « Points RPA ».
+	2. Dans le menu du haut, cliquez sur Extensions (ou Outils selon votre version), puis sur Apps Script.
+	3. Une nouvelle page Web va s'ouvrir : c'est l'éditeur de code de Google. Le fichier s'appelle généralement Code.gs.
+• Méthode B : Depuis Google Drive
+	1. Allez sur votre Google Drive.
+	2. Cherchez un fichier avec une icône bleue contenant deux chevrons imbriqués (<>). Il s'agit d'un projet Google Apps Script autonome. Double-cliquez dessus pour l'ouvrir.
+
+Qu'allez-vous trouver à l'intérieur ?
+
+Une fois l'éditeur ouvert, vous verrez du code JavaScript. Cherchez une fonction qui commence par :
+• function doGet(e) { ... }
+• ou function doPost(e) { ... }
+C'est à l'intérieur de cette fonction que se trouve l'action checkAccess mentionnée par AI Studio, et c'est tout à la fin de cette fonction qu'il faut s'assurer que le résultat est renvoyé avec le fameux ContentService.createTextOutput(...) pour que votre Firefox arrête de bloquer la requête (CORS).
+Une fois que vous avez réussi à ouvrir cet éditeur Apps Script :
+• Voyez-vous un fichier nommé Code.gs ?
+• Si vous le souhaitez, vous pouvez copier-coller les premières lignes de la fonction doGet ou doPost pour que l'on vérifie ensemble si le problème de CORS vient de là.
+Les réponses de l'IA peuvent contenir des erreurs. En savoir plus
+examine ce code et vois s'il y a un souci/** * @license * SPDX-License-Identifier: Apache-2.0 */import React, { useState, useEffect, useCallback, useMemo } from 'react';import { User, Users, Calendar, PlusCircle, Tag, CheckCircle, AlertCircle, RefreshCw, Sparkles, Info, Layers, ArrowRight, ShieldCheck, FileSpreadsheet, Eye, ShieldAlert,} from 'lucide-react';import { Member, MotifKey, OperationRecord, SheetConfig, UserProfile, UserPermission } from './types';import { DEFAULT_MEMBERS, DEFAULT_MOTIFS, DEFAULT_OPERATIONS,} from './lib/defaultData';import { initAuth, googleSignIn, logout,} from './lib/firebase';import { LOCAL_STORAGE_SHEET_KEY, LOCAL_STORAGE_SAVED_OPERATIONS, formatBelgianDateTime, formatBelgianDate, fetchFromAppsScript, postToAppsScript, parseOperationDateTime, checkUserSheetPermission,} from './lib/googleSheets';import { HeaderBanner } from './components/HeaderBanner';import { MemberSelector, ALL_MEMBERS_OPTION } from './components/MemberSelector';import { OperationForm } from './components/OperationForm';import { NewMemberModal } from './components/NewMemberModal';import { NewMotifModal } from './components/NewMotifModal';import { EditMotifModal } from './components/EditMotifModal';import { ConfirmationModal } from './components/ConfirmationModal';import { RecentOperationsList } from './components/RecentOperationsList';import { SpreadsheetSettingsModal } from './components/SpreadsheetSettingsModal';import { Footer } from './components/Footer';const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxmzlZgSplShtZX_TkmrOKvC-R0Jvy5nAlS0tQgTYkKvprfXckTUJKt--aTgIjzdxeE/exec';export default function App() { // Authentication state const [currentUser, setCurrentUser] = useState<UserProfile | null>(null); const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(false); const [userPermission, setUserPermission] = useState<UserPermission | null>(null); const [isCheckingPermission, setIsCheckingPermission] = useState<boolean>(false); // Spreadsheet configuration state const [sheetConfig, setSheetConfig] = useState<SheetConfig>(() => { try { const saved = localStorage.getItem(LOCAL_STORAGE_SHEET_KEY); if (saved) { const parsed = JSON.parse(saved); if (!parsed.appsScriptUrl || parsed.appsScriptUrl.trim() === '') { parsed.appsScriptUrl = DEFAULT_APPS_SCRIPT_URL; } if (!parsed.spreadsheetName || parsed.spreadsheetName.includes('Calcul des Points')) { parsed.spreadsheetName = 'Points RPA'; } return parsed; } } catch { // ignore } return { spreadsheetName: 'Points RPA', membresSheetName: 'Membres', keysSheetName: 'Keys', operationsSheetName: 'Opérations', isCustomConfigured: true, appsScriptUrl: DEFAULT_APPS_SCRIPT_URL, }; }); // App data state const [members, setMembers] = useState<Member[]>([]); const [motifs, setMotifs] = useState<MotifKey[]>([]); const [operations, setOperations] = useState<OperationRecord[]>([]); // Active selections const [selectedMember, setSelectedMember] = useState<Member | null>(null); const [editingOperation, setEditingOperation] = useState<OperationRecord | null>(null); // Calcul dynamique et réactif du solde des points pour chaque membre à partir de la liste des opérations const membersWithPoints = useMemo(() => { return members.map((m) => { const totalPoints = operations .filter((op) => (op.membre || '').trim().toLowerCase() === (m.nom || '').trim().toLowerCase()) .reduce((sum, op) => sum + (Number(op.points) || 0), 0); return { ...m, pointsActuels: totalPoints, }; }); }, [members, operations]); const currentSelectedMemberWithPoints = useMemo(() => { if (!selectedMember) return null; if (selectedMember.nom === 'Tous') return selectedMember; const found = membersWithPoints.find( (m) => m.nom.trim().toLowerCase() === selectedMember.nom.trim().toLowerCase() ); return found || selectedMember; }, [selectedMember, membersWithPoints]); // Loading & syncing states const [isLoadingMembers, setIsLoadingMembers] = useState<boolean>(false); const [isSyncing, setIsSyncing] = useState<boolean>(false); const [actionLoading, setActionLoading] = useState<boolean>(false); // Modals state const [isNewMemberModalOpen, setIsNewMemberModalOpen] = useState<boolean>(false); const [newMemberInitialName, setNewMemberInitialName] = useState<string>(''); const [isNewMotifModalOpen, setIsNewMotifModalOpen] = useState<boolean>(false); const [isEditMotifModalOpen, setIsEditMotifModalOpen] = useState<boolean>(false); const [currentMotifToEdit, setCurrentMotifToEdit] = useState<MotifKey | null>(null); const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false); // Confirmation Modal state for mutating operations const [confirmationData, setConfirmationData] = useState<{ actionType: 'insert' | 'update' | 'delete'; operation: { id?: string; rowNumber?: number; dateRando: string; membre: string; points: number; description: string; mail: string; dateOperation: string; }; } | null>(null); // Toast notifications const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string; } | null>(null); const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => { setToast({ message, type }); setTimeout(() => { setToast(null); }, 4500); }; // Sync operations to localStorage useEffect(() => { try { localStorage.setItem(LOCAL_STORAGE_SAVED_OPERATIONS, JSON.stringify(operations)); } catch { // ignore } }, [operations]); // Sync sheetConfig to localStorage useEffect(() => { try { localStorage.setItem(LOCAL_STORAGE_SHEET_KEY, JSON.stringify(sheetConfig)); } catch { // ignore } }, [sheetConfig]); // Contrôle des permissions Google Sheets en écriture (Propriétaire ou Éditeur Drive) const checkPermissions = useCallback( async (userToTest?: UserProfile | null) => { const email = userToTest?.email ?? currentUser?.email; if (!email || !sheetConfig.appsScriptUrl) { setUserPermission(null); return; } setIsCheckingPermission(true); try { const perm = await checkUserSheetPermission(sheetConfig.appsScriptUrl, email); setUserPermission(perm); } catch (err) { console.warn('Erreur vérification permission:', err); } finally { setIsCheckingPermission(false); } }, [currentUser?.email, sheetConfig.appsScriptUrl] ); // Initialize Firebase Auth listener (ne s'exécute qu'une seule fois au montage) useEffect(() => { const unsubscribe = initAuth( (user) => { const profile: UserProfile = { uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL, }; setCurrentUser(profile); setIsGoogleConnected(true); }, () => { setCurrentUser(null); setIsGoogleConnected(false); setUserPermission(null); } ); return () => unsubscribe(); }, []); // Dès que le compte utilisateur ou l'URL du script change, vérifier automatiquement les permissions RW useEffect(() => { if (!currentUser?.email || !sheetConfig.appsScriptUrl) { setUserPermission(null); return; } let isMounted = true; setIsCheckingPermission(true); checkUserSheetPermission(sheetConfig.appsScriptUrl, currentUser.email) .then((perm) => { if (isMounted) setUserPermission(perm); }) .catch((err) => { console.warn('Erreur vérification permission:', err); }) .finally(() => { if (isMounted) setIsCheckingPermission(false); }); return () => { isMounted = false; }; }, [currentUser?.email, sheetConfig.appsScriptUrl]);
+En examinant votre code React, l'architecture globale est propre et la gestion des états est bien structurée. Cependant, il y a un souci technique majeur directement lié au blocage et au plantage de Firefox dont vous parliez, ainsi qu'une redondance de code qui peut impacter les performances.
+Voici les problèmes identifiés et comment les corriger :
+
+1. Le problème critique : Une double boucle de requêtes réseau (Pourquoi Firefox plante)
+
+Regardez vos deux derniers useEffect :
+• Le premier définit la fonction checkPermissions enveloppée dans un useCallback (qui dépend de currentUser?.email).
+• Le deuxième useEffect (l'avant-dernier du fichier) écoute l'initialisation de Firebase et met à jour currentUser via setCurrentUser(profile).
+• Le troisième useEffect (le tout dernier) se déclenche dès que currentUser?.email change pour exécuter de force checkUserSheetPermission.
+Ce qui se passe en tâche de fond :
+Au démarrage, l'état d'authentification change plusieurs fois (Firebase cherche la session, trouve l'utilisateur, met à jour le profil). À chaque micro-changement ou ré-instanciation de l'application, le dernier useEffect va mitrailler des requêtes asynchrones vers l'URL de votre Google Apps Script (DEFAULT_APPS_SCRIPT_URL).
+Si votre script Apps Script met du temps à répondre ou génère une erreur CORS, ces requêtes s'accumulent en arrière-plan, saturent le thread réseau de Firefox, et finissent par faire planter complètement l'onglet ou le navigateur.
+
+2. Redondance de logique (Code mort)
+
+La fonction checkPermissions définie à la ligne 153 (via useCallback) fait exactement la même chose que le dernier useEffect (ligne 179). Pire encore, la fonction checkPermissions n'est appelée nulle part dans le code que vous avez fourni, mais elle est recréée à chaque fois que l'e-mail change.
+
+🛠️ Comment corriger le code React ?
+
+Pour stabiliser Firefox et nettoyer le code, il faut fusionner la logique de vérification et centraliser l'appel à la permission au moment précis où l'utilisateur est détecté par Firebase.
+Voici la version corrigée et optimisée de la fin de votre fichier (remplacez toute la partie à partir de // Contrôle des permissions... jusqu'à la fin) :
+typescript
+  // --- CODE NETTOYÉ ET SÉCURISÉ POUR LES PERMISSIONS ---
+
+  // Centralisation de la vérification pour éviter les requêtes en boucle
+  const verifyIncomingPermission = useCallback(async (email: string | null | undefined) => {
+    if (!email || !sheetConfig.appsScriptUrl) {
+      setUserPermission(null);
+      return;
+    }
+    setIsCheckingPermission(true);
+    try {
+      const perm = await checkUserSheetPermission(sheetConfig.appsScriptUrl, email);
+      setUserPermission(perm);
+    } catch (err) {
+      console.warn('Erreur vérification permission:', err);
+      setUserPermission(null);
+    } finally {
+      setIsCheckingPermission(false);
+    }
+  }, [sheetConfig.appsScriptUrl]);
+
+  // Écouteur Firebase unique : Gère l'utilisateur ET sa permission en une seule fois
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user) => {
+        const profile: UserProfile = {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+        };
+        setCurrentUser(profile);
+        setIsGoogleConnected(true);
+        
+        // On ne lance la vérification Apps Script que si l'e-mail est valide
+        if (user.email) {
+          verifyIncomingPermission(user.email);
+        }
+      },
+      () => {
+        setCurrentUser(null);
+        setIsGoogleConnected(false);
+        setUserPermission(null);
+      }
+    );
+    return () => unsubscribe();
+  }, [verifyIncomingPermission]);
+
+  // Sécurité supplémentaire : Uniquement si l'URL du script change manuellement dans les paramètres
+  useEffect(() => {
+    if (currentUser?.email) {
+      verifyIncomingPermission(currentUser.email);
+    }
+  }, [sheetConfig.appsScriptUrl, verifyIncomingPermission, currentUser?.email]);
+Utilisez le code avec précaution.
+
+3. Rappel crucial concernant l'erreur CORS côté Google Apps Script
+
+Le code React ci-dessus va empêcher le bombardement de requêtes, mais si l'erreur CORS persiste dans la console de Firefox au premier clic, le problème vient du fichier côté serveur (votre script Google Apps Script).
+Pour que Firefox accepte la réponse, assurez-vous que la fonction qui gère checkUserSheetPermission dans votre Google Apps Script se termine par un renvoi au format JSON strict, comme ceci :
+javascript
+return ContentService.createTextOutput(JSON.stringify(votreResultat))
+                     .setMimeType(ContentService.MimeType.JSON);
+Utilisez le code avec précaution.
+Maintenant que le code React est optimisé :
+• Est-ce que les plantages de Firefox ont cessé après l'application de ce correctif ?
+• Avez-vous besoin d'aide pour adapter le code de votre Google Apps Script (le fichier Code.gs sur Google Drive) afin de régler définitivement le blocage CORS ?
+Les réponses de l'IA peuvent contenir des erreurs. En savoir plus
+
+voici le code cote script
+// ========================================================
+// Code Google Apps Script (Code.gs) pour la WebApp RPA Points Non-FFBC
+// Fichier cible : "Points RPA"
+// Schéma strict 8 colonnes (A à H) :
+// Col A : Date rando (jj/mm/aaaa)
+// Col B : Nom du membre
+// Col C : Points (nombre entier)
+// Col D : Description ou motif
+// Col E : Checkbox vide (case à cocher décochée)
+// Col F : WebApp RPA (Source)
+// Col G : Adresse mail de connexion
+// Col H : Date opération (jj/mm/aaaa hh:mm:ss)
+// ========================================================
+
+function getRpaSpreadsheet() {
+  try {
+    var active = SpreadsheetApp.getActiveSpreadsheet();
+    if (active) return active;
+  } catch (err) {}
+
+  var files = DriveApp.getFilesByName("Points RPA");
+  if (files.hasNext()) {
+    return SpreadsheetApp.open(files.next());
+  }
+  throw new Error("Classeur 'Points RPA' introuvable dans Google Drive.");
+}
+
+function getSheetCaseInsensitive(ss, targetName) {
+  var direct = ss.getSheetByName(targetName);
+  if (direct) return direct;
+  var norm = targetName.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  var allSheets = ss.getSheets();
+  for (var s = 0; s < allSheets.length; s++) {
+    var curName = allSheets[s].getName().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    if (curName === norm) return allSheets[s];
+  }
+  return null;
+}
+
+// Détection intelligente des colonnes selon la ligne 1 (En-têtes)
+// Garantit que chaque information est toujours enregistrée dans le bon champ
+function getOperationsColumnMapping(sheet) {
+  var lastCol = Math.max(sheet.getLastColumn(), 8);
+  var headerValues = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
+  
+  // Ordre strict A à H par défaut (1-indexé)
+  var mapping = {
+    dateRando: 1,      // Col A : Date rando
+    membre: 2,         // Col B : Nom du membre
+    points: 3,         // Col C : Points
+    description: 4,    // Col D : Description ou motif
+    checkbox: 5,       // Col E : Case à cocher vide
+    source: 6,         // Col F : WebApp RPA
+    mail: 7,           // Col G : Adresse mail de connexion
+    dateOperation: 8   // Col H : Date de l'opération
+  };
+  
+  // Si la ligne 1 contient des en-têtes réels, on s'adapte automatiquement
+  for (var c = 0; c < headerValues.length; c++) {
+    var h = String(headerValues[c] || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    if (!h) continue;
+    
+    if (h.includes('rando') || (h.includes('date') && !h.includes('op') && !h.includes('horodat') && !h.includes('timestamp') && !h.includes('saisi') && !h.includes('enreg'))) {
+      mapping.dateRando = c + 1;
+    } else if (h.includes('nom') || h.includes('membre') || h.includes('cyclotouriste') || h.includes('adherent')) {
+      mapping.membre = c + 1;
+    } else if (h.includes('point') || h.includes('pts') || h.includes('score')) {
+      mapping.points = c + 1;
+    } else if (h.includes('desc') || h.includes('motif') || h.includes('activit') || h.includes('remarque') || h.includes('objet')) {
+      mapping.description = c + 1;
+    } else if (h.includes('case') || h.includes('coch') || h.includes('check') || h.includes('valid') || h.includes('traite') || h.includes('vu')) {
+      mapping.checkbox = c + 1;
+    } else if (h.includes('source') || h.includes('webapp') || h.includes('app') || h.includes('origine')) {
+      mapping.source = c + 1;
+    } else if (h.includes('mail') || h.includes('courriel') || h.includes('email') || h.includes('utilisateur') || h.includes('auteur')) {
+      mapping.mail = c + 1;
+    } else if (h.includes('horodat') || h.includes('timestamp') || (h.includes('date') && (h.includes('op') || h.includes('enreg') || h.includes('saisi') || h.includes('creation')))) {
+      mapping.dateOperation = c + 1;
+    }
+  }
+  
+  return { mapping: mapping, maxCol: Math.max(lastCol, 8) };
+}
+
+function doGet(e) {
+  var ss = getRpaSpreadsheet();
+  var action = (e && e.parameter && e.parameter.action) || 'status';
+
+  // 1. Lire la liste des membres autorisés
+  if (action === 'getMembers') {
+    var sheet = getSheetCaseInsensitive(ss, 'Membres');
+    if (!sheet) return jsonResponse({ success: false, error: "Feuille Membres introuvable" });
+    var data = sheet.getDataRange().getDisplayValues();
+    if (data.length <= 1) return jsonResponse({ success: true, members: [] });
+    
+    var headers = data[0].map(function(h) { return String(h || '').trim().toLowerCase(); });
+    var nomIdx = headers.findIndex(function(h) { return h.includes('nom') || h === 'membre'; });
+    if (nomIdx === -1) nomIdx = 0;
+    var majIdx = headers.findIndex(function(h) { return h.includes('maj') || h.includes('manuelle') || h === 'afficher'; });
+    var matriculeIdx = headers.findIndex(function(h) { return h.includes('matricule') || h.includes('id'); });
+    
+    var members = [];
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      var nom = row[nomIdx];
+      if (!nom || String(nom).trim() === '') continue;
+      
+      var isMaj = true;
+      if (majIdx !== -1) {
+        var val = String(row[majIdx] || '').trim().toUpperCase();
+        isMaj = val === 'TRUE' || val === 'VRAI' || val === '1' || val === 'OUI';
+      }
+      
+      if (isMaj) {
+        members.push({
+          nom: String(nom).trim(),
+          matricule: matriculeIdx !== -1 && row[matriculeIdx] ? String(row[matriculeIdx]).trim() : ''
+        });
+      }
+    }
+    return jsonResponse({ success: true, members: members });
+  }
+
+  // 2. Lire les motifs autorisés sous Form_Points_non_FFBC
+  if (action === 'getKeys') {
+    var sheet = getSheetCaseInsensitive(ss, 'Keys');
+    if (!sheet) return jsonResponse({ success: true, motifs: [] });
+    var data = sheet.getDataRange().getDisplayValues();
+    var motifs = [];
+    for (var j = 0; j < data.length; j++) {
+      if (String(data[j][0]).trim() === 'Form_Points_non_FFBC') {
+        var label = String(data[j][1] || '').trim();
+        var pts = data[j][2] ? parseInt(data[j][2], 10) : undefined;
+        if (label) {
+          motifs.push({
+            key: 'Form_Points_non_FFBC',
+            label: label,
+            defaultPoints: isNaN(pts) ? undefined : pts
+          });
+        }
+      }
+    }
+    return jsonResponse({ success: true, motifs: motifs });
+  }
+
+  // 3. Lire les opérations enregistrées (Colonnes A à H avec détection automatique)
+  if (action === 'getOperations') {
+    var sheet = getSheetCaseInsensitive(ss, 'Opérations');
+    if (!sheet) return jsonResponse({ success: true, operations: [] });
+    var data = sheet.getDataRange().getDisplayValues();
+    if (data.length <= 1) return jsonResponse({ success: true, operations: [] });
+
+    var colInfo = getOperationsColumnMapping(sheet);
+    var m = colInfo.mapping;
+    var operations = [];
+
+    for (var k = 1; k < data.length; k++) {
+      var r = data[k];
+      if (!r || r.length === 0) continue;
+      var membreVal = String(r[m.membre - 1] || '').trim();
+      var dateRandoVal = String(r[m.dateRando - 1] || '').trim();
+      if (!membreVal && !dateRandoVal) continue;
+
+      var checkVal = r[m.checkbox - 1];
+      var isChecked = checkVal === true || String(checkVal).toUpperCase() === 'TRUE' || String(checkVal).toUpperCase() === 'VRAI' || checkVal === 1 || checkVal === '1';
+
+      operations.push({
+        rowNumber: k + 1,
+        dateRando: dateRandoVal,
+        membre: membreVal,
+        points: parseInt(r[m.points - 1], 10) || 0,
+        description: String(r[m.description - 1] || '').trim(),
+        colE: isChecked,
+        isChecked: isChecked,
+        source: String(r[m.source - 1] || 'WebApp RPA').trim(),
+        mail: String(r[m.mail - 1] || '').trim(),
+        dateOperation: String(r[m.dateOperation - 1] || '').trim()
+      });
+    }
+    return jsonResponse({ success: true, operations: operations });
+  }
+
+  var opSheet = getSheetCaseInsensitive(ss, 'Opérations');
+  var colMap = opSheet ? getOperationsColumnMapping(opSheet).mapping : null;
+  return jsonResponse({ success: true, status: 'OK', title: ss.getName(), detectedColumns: colMap });
+}
+
+function doPost(e) {
+  try {
+    var ss = getRpaSpreadsheet();
+    var body = JSON.parse(e.postData.contents);
+
+    //
+
+Le voilà, le coupable ! En analysant votre code côté Google Apps Script, j'ai trouvé exactement deux problèmes critiques qui expliquent pourquoi Firefox lève une erreur CORS et finit par planter.
+
+1. Pourquoi cela plante (Les erreurs dans le script)
+
+
+Erreur A : Le jsonResponse est manquant
+
+À la fin de chaque bloc d'action (comme action === 'getMembers'), votre script fait :
+return jsonResponse({ success: true, ... });
+Le problème ? La fonction jsonResponse() n'est définie nulle partie dans votre script. Google Apps Script s'arrête net avec une erreur interne (jsonResponse is not defined), ce qui coupe la connexion brutalement. Firefox interprète ce crash serveur comme une "Erreur Réseau / CORS".
+
+Erreur B : La fonction doPost(e) est coupée et ne gère pas le CORS
+
+Votre fonction doPost(e) s'arrête brusquement au milieu de sa syntaxe à la ligne var body = JSON.parse(e.postData.contents);. De plus, aucun des retours de votre script actuel ne spécifie le bon format requis par les navigateurs modernes (ContentService).
+
+🛠️ La solution : Le code corrigé pour votre Apps Script
+
+Voici le code complet, corrigé et sécurisé pour votre fichier Code.gs. Il intègre la fameuse fonction jsonResponse indispensable qui ajoute les bons en-têtes pour rendre Firefox totalement stable et éliminer l'erreur CORS.
+Remplacez l'intégralité du code de votre fichier Code.gs par celui-ci :
+javascript
+// ========================================================
+// Code Google Apps Script (Code.gs) pour la WebApp RPA Points Non-FFBC
+// Fichier cible : "Points RPA"
+// Schéma strict 8 colonnes (A à H)
+// ========================================================
+
+function getRpaSpreadsheet() {
+  try {
+    var active = SpreadsheetApp.getActiveSpreadsheet();
+    if (active) return active;
+  } catch (err) {}
+
+  var files = DriveApp.getFilesByName("Points RPA");
+  if (files.hasNext()) {
+    return SpreadsheetApp.open(files.next());
+  }
+  throw new Error("Classeur 'Points RPA' introuvable dans Google Drive.");
+}
+
+function getSheetCaseInsensitive(ss, targetName) {
+  var direct = ss.getSheetByName(targetName);
+  if (direct) return direct;
+  var norm = targetName.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  var allSheets = ss.getSheets();
+  for (var s = 0; s < allSheets.length; s++) {
+    var curName = allSheets[s].getName().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    if (curName === norm) return allSheets[s];
+  }
+  return null;
+}
+
+// Détection intelligente des colonnes selon la ligne 1 (En-têtes)
+function getOperationsColumnMapping(sheet) {
+  var lastCol = Math.max(sheet.getLastColumn(), 8);
+  var headerValues = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
+  
+  var mapping = {
+    dateRando: 1,      // Col A
+    membre: 2,         // Col B
+    points: 3,         // Col C
+    description: 4,    // Col D
+    checkbox: 5,       // Col E
+    source: 6,         // Col F
+    mail: 7,           // Col G
+    dateOperation: 8   // Col H
+  };
+  
+  for (var c = 0; c < headerValues.length; c++) {
+    var h = String(headerValues[c] || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    if (!h) continue;
+    
+    if (h.includes('rando') || (h.includes('date') && !h.includes('op') && !h.includes('horodat') && !h.includes('timestamp'))) {
+      mapping.dateRando = c + 1;
+    } else if (h.includes('nom') || h.includes('membre') || h.includes('cyclotouriste')) {
+      mapping.membre = c + 1;
+    } else if (h.includes('point') || h.includes('pts')) {
+      mapping.points = c + 1;
+    } else if (h.includes('desc') || h.includes('motif')) {
+      mapping.description = c + 1;
+    } else if (h.includes('case') || h.includes('coch') || h.includes('check')) {
+      mapping.checkbox = c + 1;
+    } else if (h.includes('source') || h.includes('webapp')) {
+      mapping.source = c + 1;
+    } else if (h.includes('mail') || h.includes('email')) {
+      mapping.mail = c + 1;
+    } else if (h.includes('horodat') || h.includes('timestamp') || (h.includes('date') && (h.includes('op') || h.includes('enreg')))) {
+      mapping.dateOperation = c + 1;
+    }
+  }
+  return { mapping: mapping, maxCol: Math.max(lastCol, 8) };
+}
+
+// --- GESTION DES REQUÊTES GET ---
+function doGet(e) {
+  try {
+    var ss = getRpaSpreadsheet();
+    var action = (e && e.parameter && e.parameter.action) || 'status';
+
+    // Action : Vérifier les permissions de l'utilisateur connecté (Requis par votre React)
+    if (action === 'checkAccess') {
+      var email = e.parameter.email;
+      if (!email) return jsonResponse({ success: false, error: "Email manquant" });
+      
+      try {
+        // Tente d'accéder aux éditeurs pour voir si l'utilisateur y figure
+        var editors = ss.getEditors();
+        var isEditor = editors.some(function(ed) { return ed.getEmail().toLowerCase() === email.toLowerCase(); });
+        var isOwner = ss.getOwner().getEmail().toLowerCase() === email.toLowerCase();
+        
+        if (isOwner || isEditor) {
+          return jsonResponse({ success: true, permission: { write: true, role: isOwner ? 'owner' : 'editor' } });
+        }
+      } catch(err) {
+        // Si le script s'exécute en mode restreint, on gère l'erreur gentiment
+      }
+      return jsonResponse({ success: true, permission: { write: false, role: 'viewer' } });
+    }
+
+    // 1. Lire la liste des membres
+    if (action === 'getMembers') {
+      var sheet = getSheetCaseInsensitive(ss, 'Membres');
+      if (!sheet) return jsonResponse({ success: false, error: "Feuille Membres introuvable" });
+      var data = sheet.getDataRange().getDisplayValues();
+      if (data.length <= 1) return jsonResponse({ success: true, members: [] });
+      
+      var headers = data[0].map(function(h) { return String(h || '').trim().toLowerCase(); });
+      var nomIdx = headers.findIndex(function(h) { return h.includes('nom') || h === 'membre'; });
+      if (nomIdx === -1) nomIdx = 0;
+      var majIdx = headers.findIndex(function(h) { return h.includes('maj') || h === 'afficher'; });
+      var matriculeIdx = headers.findIndex(function(h) { return h.includes('matricule'); });
+      
+      var members = [];
+      for (var i = 1; i < data.length; i++) {
+        var row = data[i];
+        var nom = row[nomIdx];
+        if (!nom || String(nom).trim() === '') continue;
+        
+        var isMaj = true;
+        if (majIdx !== -1) {
+          var val = String(row[majIdx] || '').trim().toUpperCase();
+          isMaj = val === 'TRUE' || val === 'VRAI' || val === '1' || val === 'OUI';
+        }
+        
+        if (isMaj) {
+          members.push({
+            nom: String(nom).trim(),
+            matricule: matriculeIdx !== -1 && row[matriculeIdx] ? String(row[matriculeIdx]).trim() : ''
+          });
+        }
+      }
+      return jsonResponse({ success: true, members: members });
+    }
+
+    // 2. Lire les motifs autorisés
+    if (action === 'getKeys') {
+      var sheet = getSheetCaseInsensitive(ss, 'Keys');
+      if (!sheet) return jsonResponse({ success: true, motifs: [] });
+      var data = sheet.getDataRange().getDisplayValues();
+      var motifs = [];
+      for (var j = 0; j < data.length; j++) {
+        if (String(data[j][0]).trim() === 'Form_Points_non_FFBC') {
+          var label = String(data[j][1] || '').trim();
+          var pts = data[j][2] ? parseInt(data[j][2], 10) : undefined;
+          if (label) {
+            motifs.push({
+              key: 'Form_Points_non_FFBC',
+              label: label,
+              defaultPoints: isNaN(pts) ? undefined : pts
+            });
+          }
+        }
+      }
+      return jsonResponse({ success: true, motifs: motifs });
+    }
+
+    // 3. Lire les opérations enregistrées
+    if (action === 'getOperations') {
+      var sheet = getSheetCaseInsensitive(ss, 'Opérations');
+      if (!sheet) return jsonResponse({ success: true, operations: [] });
+      var data = sheet.getDataRange().getDisplayValues();
+      if (data.length <= 1) return jsonResponse({ success: true, operations: [] });
+
+      var colInfo = getOperationsColumnMapping(sheet);
+      var m = colInfo.mapping;
+      var operations = [];
+
+      for (var k = 1; k < data.length; k++) {
+        var r = data[k];
+        if (!r || r.length === 0) continue;
+        var membreVal = String(r[m.membre - 1] || '').trim();
+        var dateRandoVal = String(r[m.dateRando - 1] || '').trim();
+        if (!membreVal && !dateRandoVal) continue;
+
+        var checkVal = r[m.checkbox - 1];
+        var isChecked = checkVal === true || String(checkVal).toUpperCase() === 'TRUE' || String(checkVal).toUpperCase() === 'VRAI' || checkVal === 1;
+
+        operations.push({
+          rowNumber: k + 1,
+          dateRando: dateRandoVal,
+          membre: membreVal,
+          points: parseInt(r[m.points - 1], 10) || 0,
+          description: String(r[m.description - 1] || '').trim(),
+          colE: isChecked,
+          isChecked: isChecked,
+          source: String(r[m.source - 1] || 'WebApp RPA').trim(),
+          mail: String(r[m.mail - 1] || '').trim(),
+          dateOperation: String(r[m.dateOperation - 1] || '').trim()
+        });
+      }
+      return jsonResponse({ success: true, operations: operations });
+    }
+
+    var opSheet = getSheetCaseInsensitive(ss, 'Opérations');
+    var colMap = opSheet ? getOperationsColumnMapping(opSheet).mapping : null;
+    return jsonResponse({ success: true, status: 'OK', title: ss.getName(), detectedColumns: colMap });
+
+  } catch (error) {
+    return jsonResponse({ success: false, error: error.toString() });
+  }
+}
+
+// --- GESTION DES REQUÊTES POST (Enregistrement / Modification) ---
+function doPost(e) {
+  try {
+    var ss = getRpaSpreadsheet();
+    var body = JSON.parse(e.postData.contents);
+    var action = body.action;
+    
+    var sheet = getSheetCaseInsensitive(ss, 'Opérations');
+    if (!sheet) return jsonResponse({ success: false, error: "Feuille 'Opérations' introuvable" });
+    
+    var colInfo = getOperationsColumnMapping(sheet);
+    var m = colInfo.mapping;
+
+    // Sauvegarde d'une nouvelle opération
+    if (action === 'insertOperation') {
+      var rowData = [];
+      // Remplissage de la ligne selon la cartographie dynamique des colonnes
+      rowData[m.dateRando - 1] = body.dateRando;
+      rowData[m.membre - 1] = body.membre;
+      rowData[m.points - 1] = parseInt(body.points, 10) || 0;
+      rowData[m.description - 1] = body.description || '';
+      rowData[m.checkbox - 1] = false; // Case décochée par défaut
+      rowData[m.source - 1] = 'WebApp RPA';
+      rowData[m.mail - 1] = body.mail || '';
+      rowData[m.dateOperation - 1] = body.dateOperation;
+
+      sheet.appendRow(rowData);
+      return jsonResponse({ success: true, message: "Opération enregistrée avec succès !" });
+    }
+
+    return jsonResponse({ success: false, error: "Action POST inconnue" });
+
+  } catch (error) {
+    return jsonResponse({ success: false, error: error.toString() });
+  }
+}
+
+// --- FONCTION DE RÉPONSE CRUCIALE POUR ÉVITER LE CORS ---
+function jsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+Utilisez le code avec précaution.
+
+3. Étape finale obligatoire après avoir collé le code :
+
+Dans l'interface de Google Apps Script :
+1. Cliquez sur le bouton 💾 Enregistrer (l'icône de disquette).
+2. Cliquez sur le bouton bleu Déployer (en haut à droite) > Gérer les déploiements.
+3. Cliquez sur le crayon (Modifier) à côté de votre déploiement actif.
+4. Dans Version, choisissez "Nouvelle version" (C'est obligatoire, sinon Google n'applique pas les modifications).
+5. Assurez-vous que les droits sont configurés sur : Exécuter en tant que : Moi et Qui a accès : Tout le monde (Même les personnes anonymes, indispensable pour le trafic d'API).
+6. Cliquez sur Déployer.
+Une fois cette nouvelle version déployée, faites un test de connexion depuis votre application :
+• L'erreur CORS a-t-elle complètement disparu ?
+• Est-ce que le badge vert "Éditeur RW validé" s'affiche correctement à la connexion ?

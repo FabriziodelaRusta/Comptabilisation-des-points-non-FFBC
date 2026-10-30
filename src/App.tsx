@@ -182,27 +182,28 @@ export default function App() {
   }, [sheetConfig]);
 
   // Contrôle des permissions Google Sheets en écriture (Propriétaire ou Éditeur Drive)
-  const checkPermissions = useCallback(
-    async (userToTest?: UserProfile | null) => {
-      const targetUser = userToTest !== undefined ? userToTest : currentUser;
-      if (!targetUser?.email || !sheetConfig.appsScriptUrl) {
+  // Centralisation du contrôle des permissions pour éviter les requêtes en boucle
+  const verifyIncomingPermission = useCallback(
+    async (email: string | null | undefined) => {
+      if (!email || !sheetConfig.appsScriptUrl) {
         setUserPermission(null);
         return;
       }
       setIsCheckingPermission(true);
       try {
-        const perm = await checkUserSheetPermission(sheetConfig.appsScriptUrl, targetUser.email);
+        const perm = await checkUserSheetPermission(sheetConfig.appsScriptUrl, email);
         setUserPermission(perm);
       } catch (err) {
         console.warn('Erreur vérification permission:', err);
+        setUserPermission(null);
       } finally {
         setIsCheckingPermission(false);
       }
     },
-    [currentUser, sheetConfig.appsScriptUrl]
+    [sheetConfig.appsScriptUrl]
   );
 
-  // Initialize Firebase Auth listener (restaure automatiquement la session si déjà connecté)
+  // Initialize Firebase Auth listener : gère l'utilisateur et sa permission en une seule fois
   useEffect(() => {
     const unsubscribe = initAuth(
       (user) => {
@@ -214,7 +215,10 @@ export default function App() {
         };
         setCurrentUser(profile);
         setIsGoogleConnected(true);
-        checkPermissions(profile);
+
+        if (user.email) {
+          verifyIncomingPermission(user.email);
+        }
       },
       () => {
         setCurrentUser(null);
@@ -223,83 +227,93 @@ export default function App() {
       }
     );
     return () => unsubscribe();
-  }, [checkPermissions]);
+  }, [verifyIncomingPermission]);
+
+  // Si l'URL du script change manuellement dans les réglages
+  useEffect(() => {
+    if (currentUser?.email) {
+      verifyIncomingPermission(currentUser.email);
+    }
+  }, [sheetConfig.appsScriptUrl, verifyIncomingPermission, currentUser?.email]);
 
   // Fetch or reload data from Google Sheets via Apps Script
-  const loadDataFromGoogleSheets = useCallback(async () => {
-    if (!sheetConfig.appsScriptUrl) return;
+  const loadDataFromGoogleSheets = useCallback(
+    async (silent = false) => {
+      if (!sheetConfig.appsScriptUrl) return;
 
-    setIsSyncing(true);
-    try {
-      setIsLoadingMembers(true);
-      const membersRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getMembers');
-      if (membersRes?.success && Array.isArray(membersRes.members)) {
-        setMembers(
-          membersRes.members.map((m: any, i: number) => ({
-            id: `mem-as-${i}`,
-            nom: m.nom,
-            matricule: m.matricule,
-            afficherMajManuelle: true,
-          }))
-        );
+      setIsSyncing(true);
+      try {
+        setIsLoadingMembers(true);
+        const membersRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getMembers');
+        if (membersRes?.success && Array.isArray(membersRes.members)) {
+          setMembers(
+            membersRes.members.map((m: any, i: number) => ({
+              id: `mem-as-${i}`,
+              nom: m.nom,
+              matricule: m.matricule,
+              afficherMajManuelle: true,
+            }))
+          );
+        }
+
+        const keysRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getKeys');
+        if (keysRes?.success && Array.isArray(keysRes.motifs)) {
+          setMotifs(keysRes.motifs);
+        }
+
+        const opsRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getOperations');
+        if (opsRes?.success && Array.isArray(opsRes.operations)) {
+          setOperations(
+            opsRes.operations
+              .map((op: any, i: number) => {
+                const isChecked = Boolean(
+                  op.isChecked ||
+                  op.colE === true ||
+                  String(op.colE).toUpperCase() === 'TRUE' ||
+                  String(op.colE).toUpperCase() === 'VRAI' ||
+                  op.colE === 1 ||
+                  op.colE === '1'
+                );
+                return {
+                  id: `op-as-${i}`,
+                  rowNumber: op.rowNumber,
+                  dateRando: String(op.dateRando || ''),
+                  membre: String(op.membre || ''),
+                  points: Number(op.points) || 0,
+                  description: String(op.description || ''),
+                  colE: isChecked,
+                  isChecked: isChecked,
+                  source: String(op.source || 'WebApp RPA'),
+                  mail: String(op.mail || ''),
+                  dateOperation: String(op.dateOperation || ''),
+                  syncedToGoogleSheets: true,
+                };
+              })
+              .sort(
+                (a: OperationRecord, b: OperationRecord) =>
+                  parseOperationDateTime(b.dateOperation) - parseOperationDateTime(a.dateOperation)
+              )
+          );
+        }
+
+        if (!silent) {
+          showToast('Données synchronisées avec succès depuis Points RPA !', 'success');
+        }
+      } catch (err: any) {
+        console.error('Erreur Apps Script:', err);
+        showToast(err?.message || 'Erreur lors de la synchronisation avec le script Apps Script.', 'error');
+      } finally {
+        setIsSyncing(false);
+        setIsLoadingMembers(false);
       }
+    },
+    [sheetConfig.appsScriptUrl]
+  );
 
-      const keysRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getKeys');
-      if (keysRes?.success && Array.isArray(keysRes.motifs)) {
-        setMotifs(keysRes.motifs);
-      }
-
-      const opsRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getOperations');
-      if (opsRes?.success && Array.isArray(opsRes.operations)) {
-        setOperations(
-          opsRes.operations
-            .map((op: any, i: number) => {
-              const isChecked = Boolean(
-                op.isChecked ||
-                op.colE === true ||
-                String(op.colE).toUpperCase() === 'TRUE' ||
-                String(op.colE).toUpperCase() === 'VRAI' ||
-                op.colE === 1 ||
-                op.colE === '1'
-              );
-              return {
-                id: `op-as-${i}`,
-                rowNumber: op.rowNumber,
-                dateRando: String(op.dateRando || ''),
-                membre: String(op.membre || ''),
-                points: Number(op.points) || 0,
-                description: String(op.description || ''),
-                colE: isChecked,
-                isChecked: isChecked,
-                source: String(op.source || 'WebApp RPA'),
-                mail: String(op.mail || ''),
-                dateOperation: String(op.dateOperation || ''),
-                syncedToGoogleSheets: true,
-              };
-            })
-            .sort(
-              (a: OperationRecord, b: OperationRecord) =>
-                parseOperationDateTime(b.dateOperation) - parseOperationDateTime(a.dateOperation)
-            )
-        );
-      }
-
-      showToast('Données synchronisées avec succès depuis Points RPA !', 'success');
-      if (currentUser?.email) {
-        checkPermissions(currentUser);
-      }
-    } catch (err: any) {
-      console.error('Erreur Apps Script:', err);
-      showToast(err?.message || 'Erreur lors de la synchronisation avec le script Apps Script.', 'error');
-    } finally {
-      setIsSyncing(false);
-      setIsLoadingMembers(false);
-    }
-  }, [sheetConfig.appsScriptUrl, currentUser, checkPermissions]);
-
+  // Charger les données une seule fois quand l'URL du script est définie
   useEffect(() => {
     if (sheetConfig.appsScriptUrl) {
-      loadDataFromGoogleSheets();
+      loadDataFromGoogleSheets(true);
     }
   }, [sheetConfig.appsScriptUrl, loadDataFromGoogleSheets]);
 
@@ -317,7 +331,6 @@ export default function App() {
         setCurrentUser(profile);
         setIsGoogleConnected(true);
         showToast(`Connecté avec le compte ${res.user.email}`, 'success');
-        checkPermissions(profile);
       }
     } catch (err: any) {
       showToast(err?.message || 'Échec de la connexion Google.', 'error');
@@ -929,7 +942,7 @@ export default function App() {
         }}
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
-        onRecheckPermission={() => checkPermissions(currentUser)}
+        onRecheckPermission={() => verifyIncomingPermission(currentUser?.email)}
       />
 
       {/* Footer */}

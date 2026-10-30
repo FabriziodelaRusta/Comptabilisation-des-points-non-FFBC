@@ -85,6 +85,9 @@ function getOperationsColumnMapping(sheet) {
     }
   }
   
+  return { mapping: mapping, maxCol: Math.max(lastCol, 8) };
+}
+
 // Vérification des droits d'écriture (Propriétaire ou Éditeur sur le fichier Google Drive)
 function checkUserPermission(ss, userEmail) {
   if (!userEmail || String(userEmail).trim() === '') {
@@ -150,6 +153,7 @@ function doGet(e) {
   if (action === 'checkAccess') {
     var checkMail = (e && e.parameter && e.parameter.email) || '';
     var permission = checkUserPermission(ss, checkMail);
+    permission.write = permission.canWrite;
     return jsonResponse({ success: true, permission: permission });
   }
 
@@ -276,7 +280,7 @@ function doPost(e) {
     // Col F : "WebApp RPA"
     // Col G : Adresse mail de connexion
     // Col H : Date opération (jj/mm/aaaa hh:mm:ss)
-    if (body.action === 'addOperation') {
+    if (body.action === 'addOperation' || body.action === 'insertOperation') {
       var sheet = getSheetCaseInsensitive(ss, 'Opérations');
       if (!sheet) {
         sheet = ss.insertSheet('Opérations');
@@ -528,7 +532,16 @@ export async function checkUserSheetPermission(
   try {
     const res = await fetchFromAppsScript(appsScriptUrl, 'checkAccess', { email: email.trim() });
     if (res?.success && res.permission) {
-      return res.permission as UserPermission;
+      const p = res.permission;
+      const canWrite = Boolean(p.canWrite || p.write);
+      const roleStr = String(p.role || (canWrite ? 'EDITOR' : 'VIEWER')).toUpperCase();
+      return {
+        canWrite,
+        role: roleStr as any,
+        email: email.trim(),
+        reason: p.reason,
+        warning: p.warning,
+      };
     }
     return {
       canWrite: false,
