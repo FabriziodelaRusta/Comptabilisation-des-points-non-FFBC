@@ -69,13 +69,16 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
 
   return (
     <div className="relative w-full" ref={dropdownRef}>
-      <label className="block text-sm font-bold text-gray-800 mb-1.5 flex items-center justify-between">
-        <span className="flex items-center gap-1.5">
-          <User className="w-4 h-4 text-emerald-700" />
+      <label className="block text-sm font-bold text-gray-800 mb-1.5 flex flex-wrap items-center justify-between gap-1.5">
+        <span className="flex flex-wrap items-center gap-1.5">
+          <User className="w-4 h-4 text-blue-700" />
           <span>Sélectionner le membre ou le bénévole RPA</span>
           <span className="text-red-500 font-bold">*</span>
+          <span className="text-xs text-slate-500 italic font-normal">
+            (Apparaissent ici les noms dont la case Maj_auto est cochée dans le fichier membre)
+          </span>
         </span>
-        <span className="text-xs text-emerald-700 font-normal bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+        <span className="text-xs text-blue-700 font-normal bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
           {members.length} membre{members.length > 1 ? 's' : ''} éligible{members.length > 1 ? 's' : ''} (MAJ Manuelle)
         </span>
       </label>
@@ -94,9 +97,9 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
           }}
           className={`flex-1 flex items-center justify-between px-3.5 py-3 rounded-xl border bg-white cursor-pointer shadow-sm transition-all text-left ${
             isOpen
-              ? 'border-emerald-600 ring-2 ring-emerald-500/20'
+              ? 'border-blue-600 ring-2 ring-blue-500/20'
               : selectedMember
-              ? 'border-emerald-500 bg-emerald-50/40'
+              ? 'border-blue-500 bg-blue-50/40'
               : 'border-gray-300 hover:border-gray-400'
           }`}
         >
@@ -104,7 +107,7 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
             <div className="flex items-center gap-3 min-w-0">
               <div
                 className={`w-8 h-8 rounded-lg text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm ${
-                  selectedMember.nom === 'Tous' ? 'bg-amber-600' : 'bg-emerald-700'
+                  selectedMember.nom === 'Tous' ? 'bg-amber-600' : 'bg-blue-600'
                 }`}
               >
                 {selectedMember.nom === 'Tous' ? (
@@ -182,7 +185,7 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
             )}
             <ChevronDown
               className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${
-                isOpen ? 'rotate-180 text-emerald-600' : ''
+                isOpen ? 'rotate-180 text-blue-600' : ''
               }`}
             />
           </div>

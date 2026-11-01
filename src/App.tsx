@@ -750,7 +750,7 @@ export default function App() {
   const isAllMembersSelected = selectedMember?.nom === 'Tous';
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-gray-900 selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
       {/* Toast Notification */}
       {toast && (
         <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-3 duration-200">
@@ -823,8 +823,8 @@ export default function App() {
           {isAllMembersSelected ? (
             <div className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-950">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500 text-emerald-950 flex items-center justify-center font-bold shrink-0">
-                  <Users className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-900 flex items-center justify-center font-bold shrink-0">
+                  <Users className="w-5 h-5 text-slate-900" />
                 </div>
                 <div>
                   <h4 className="font-bold text-sm">Mode consultation : Tous les membres sélectionnés</h4>
@@ -854,8 +854,8 @@ export default function App() {
             </div>
           ) : (
             <div className="p-8 rounded-2xl bg-gray-50/70 border border-dashed border-gray-300 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto font-bold">
-                <User className="w-6 h-6" />
+              <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center mx-auto font-bold">
+                <User className="w-6 h-6 text-blue-600" />
               </div>
               <div className="max-w-md mx-auto">
                 <h3 className="text-sm font-bold text-gray-800">

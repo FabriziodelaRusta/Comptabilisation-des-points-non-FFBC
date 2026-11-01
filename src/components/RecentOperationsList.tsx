@@ -303,9 +303,27 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                     </td>
 
                     <td className="px-3.5 py-3 whitespace-nowrap">
-                      <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
-                        {op.source || 'WebApp RPA'}
-                      </span>
+                      {(() => {
+                        const rawSource = String(op.source || '').trim();
+                        const isScript =
+                          rawSource.toLowerCase().includes('json') ||
+                          rawSource.toLowerCase().includes('script') ||
+                          rawSource.toLowerCase().includes('import') ||
+                          rawSource.toLowerCase().includes('.gs');
+                        const displaySource = isScript ? 'Script' : (rawSource || 'WebApp RPA');
+
+                        return (
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                              displaySource === 'Script'
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            }`}
+                          >
+                            {displaySource}
+                          </span>
+                        );
+                      })()}
                     </td>
 
                     <td className="px-3.5 py-3 text-gray-500 text-[11px] font-mono whitespace-nowrap">
