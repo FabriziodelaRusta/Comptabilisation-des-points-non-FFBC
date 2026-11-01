@@ -68,14 +68,19 @@ export const OperationForm: React.FC<OperationFormProps> = ({
     return dateStr;
   };
 
+  const DEFAULT_DESCRIPTION = 'Rando VTT non FFBC (+1 pts)';
+  const DEFAULT_POINTS = 1;
+
   const [dateRando, setDateRando] = useState<string>(
     editingOperation ? parseToInputDate(editingOperation.dateRando) : ''
   );
   const [points, setPoints] = useState<number | ''>(
-    editingOperation && typeof editingOperation.points === 'number' ? editingOperation.points : ''
+    editingOperation && typeof editingOperation.points === 'number'
+      ? editingOperation.points
+      : DEFAULT_POINTS
   );
   const [description, setDescription] = useState<string>(
-    editingOperation ? editingOperation.description || '' : ''
+    editingOperation ? editingOperation.description || '' : DEFAULT_DESCRIPTION
   );
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -92,19 +97,19 @@ export const OperationForm: React.FC<OperationFormProps> = ({
       setValidationError(null);
     } else {
       setDateRando('');
-      setPoints('');
-      setDescription('');
+      setPoints(DEFAULT_POINTS);
+      setDescription(DEFAULT_DESCRIPTION);
       setValidationError(null);
     }
   }, [editingOperation]);
 
-  // When member changes, completely clear all fields
+  // When member changes, reset all fields to default state
   useEffect(() => {
     if (prevMemberIdRef.current !== member.id) {
       prevMemberIdRef.current = member.id;
       setDateRando('');
-      setPoints('');
-      setDescription('');
+      setPoints(DEFAULT_POINTS);
+      setDescription(DEFAULT_DESCRIPTION);
       setValidationError(null);
       if (editingOperation && onCancelEdit) {
         onCancelEdit();
@@ -112,11 +117,11 @@ export const OperationForm: React.FC<OperationFormProps> = ({
     }
   }, [member.id, editingOperation, onCancelEdit]);
 
-  // Reset all fields to blank / fresh state
+  // Reset all fields to default state
   const handleResetForm = () => {
     setDateRando('');
-    setPoints('');
-    setDescription('');
+    setPoints(DEFAULT_POINTS);
+    setDescription(DEFAULT_DESCRIPTION);
     setValidationError(null);
     if (editingOperation && onCancelEdit) {
       onCancelEdit();
@@ -126,9 +131,19 @@ export const OperationForm: React.FC<OperationFormProps> = ({
   const handleMotifSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     setDescription(val);
+    if (!val) {
+      setPoints('');
+      return;
+    }
     const found = motifs.find((m) => m.label === val);
     if (found?.defaultPoints !== undefined && !isNaN(found.defaultPoints)) {
       setPoints(found.defaultPoints);
+    } else {
+      const match = val.match(/\(([+-]?\d+)\s*pts?\)/i);
+      if (match) {
+        const parsed = parseInt(match[1], 10);
+        if (!isNaN(parsed)) setPoints(parsed);
+      }
     }
   };
 
@@ -436,9 +451,12 @@ export const OperationForm: React.FC<OperationFormProps> = ({
                 className="w-full appearance-none px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 pr-9 transition-colors shadow-xs"
               >
                 <option value="">Sélectionner un motif de la table Keys...</option>
+                {description && !motifs.some((m) => m.label === description) && (
+                  <option value={description}>{description}</option>
+                )}
                 {motifs.map((m, idx) => (
                   <option key={`${m.label}-${idx}`} value={m.label}>
-                    {m.label} {m.defaultPoints !== undefined ? `(${m.defaultPoints > 0 ? '+' : ''}${m.defaultPoints} pts)` : ''}
+                    {m.label} {m.defaultPoints !== undefined && !m.label.includes('pts') ? `(${m.defaultPoints > 0 ? '+' : ''}${m.defaultPoints} pts)` : ''}
                   </option>
                 ))}
               </select>

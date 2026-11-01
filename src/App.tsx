@@ -126,6 +126,7 @@ export default function App() {
   const [isLoadingMembers, setIsLoadingMembers] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [formResetKey, setFormResetKey] = useState<number>(0);
 
   // Modals state
   const [isNewMemberModalOpen, setIsNewMemberModalOpen] = useState<boolean>(false);
@@ -669,6 +670,7 @@ export default function App() {
         };
 
         setOperations((prev) => [newOpRecord, ...prev]);
+        setFormResetKey((k) => k + 1);
 
         showToast(
           `Opération enregistrée dans Points RPA pour ${op.membre} (${op.points > 0 ? '+' : ''}${op.points} pts) !`,
@@ -838,7 +840,7 @@ export default function App() {
             /* Specific member selected: display the fields underneath */
             <div className="pt-2 animate-in fade-in duration-200">
               <OperationForm
-                key={`${currentSelectedMemberWithPoints.nom}-${editingOperation ? editingOperation.id : 'create'}`}
+                key={`${currentSelectedMemberWithPoints.nom}-${editingOperation ? editingOperation.id : `create-${formResetKey}`}`}
                 member={currentSelectedMemberWithPoints}
                 motifs={motifs}
                 user={currentUser}
