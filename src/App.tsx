@@ -55,7 +55,7 @@ import { SpreadsheetSettingsModal } from './components/SpreadsheetSettingsModal'
 import { Footer } from './components/Footer';
 
 const DEFAULT_APPS_SCRIPT_URL =
-  'https://script.google.com/macros/s/AKfycbxmzlZgSplShtZX_TkmrOKvC-R0Jvy5nAlS0tQgTYkKvprfXckTUJKt--aTgIjzdxeE/exec';
+  'https://script.google.com/macros/s/AKfycbz3t7ByQbAA6A5bdZoDRkceWQG-mqqWV23UqckdjiyPngOcwfy9TlhBx07qUU9Ci2EiGg/exec';
 
 export default function App() {
   // Authentication state
