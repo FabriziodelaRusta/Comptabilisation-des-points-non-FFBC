@@ -47,7 +47,7 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
   onRecheckPermission,
 }) => {
   const DEFAULT_APPS_SCRIPT_URL =
-   'https://script.google.com/macros/s/AKfycbzGj_cRZYKrZ0oDqKVmegZpMoYdLWJhHHeMRTHJR4waX6cvKRjyT96dmQaTYZfPKgYBwA/exec;
+    'https://script.google.com/macros/s/AKfycbzGj_cRZYKrZ0oDqKVmegZpMoYdLWJhHHeMRTHJR4waX6cvKRjyT96dmQaTYZfPKgYBwA/exec';
   const [appsScriptUrl, setAppsScriptUrl] = useState(
     config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL
   );

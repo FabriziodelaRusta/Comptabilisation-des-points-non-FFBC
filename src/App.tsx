@@ -62,7 +62,7 @@ const DEFAULT_APPS_SCRIPT_URL =
   'https://script.google.com/macros/s/AKfycbzGj_cRZYKrZ0oDqKVmegZpMoYdLWJhHHeMRTHJR4waX6cvKRjyT96dmQaTYZfPKgYBwA/exec';
 
 export default function App() {
-  / Authentication state
+  // Authentication state
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(false);
   const [userPermission, setUserPermission] = useState<UserPermission | null>(null);
