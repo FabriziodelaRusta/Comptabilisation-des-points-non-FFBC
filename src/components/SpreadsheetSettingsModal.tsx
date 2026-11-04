@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { SheetConfig, UserPermission, UserProfile } from '../types';
 import {
+  DEFAULT_APPS_SCRIPT_URL,
   SAMPLE_APPS_SCRIPT_CODE,
   fetchFromAppsScript,
   checkUserSheetPermission,
@@ -46,11 +47,12 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
   onSignOut,
   onRecheckPermission,
 }) => {
-  const DEFAULT_APPS_SCRIPT_URL =
-    'https://script.google.com/macros/s/AKfycbzGj_cRZYKrZ0oDqKVmegZpMoYdLWJhHHeMRTHJR4waX6cvKRjyT96dmQaTYZfPKgYBwA/exec';
-  const [appsScriptUrl, setAppsScriptUrl] = useState(
-    config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL
-  );
+  const [appsScriptUrl, setAppsScriptUrl] = useState(() => {
+    if (!config.appsScriptUrl || config.appsScriptUrl.includes('AKfycbxmzlZgSplShtZX')) {
+      return DEFAULT_APPS_SCRIPT_URL;
+    }
+    return config.appsScriptUrl;
+  });
   const [membresSheetName, setMembresSheetName] = useState(config.membresSheetName || 'Membres');
   const [keysSheetName, setKeysSheetName] = useState(config.keysSheetName || 'Keys');
   const [operationsSheetName, setOperationsSheetName] = useState(

@@ -34,6 +34,7 @@ import {
   logout,
 } from './lib/firebase';
 import {
+  DEFAULT_APPS_SCRIPT_URL,
   LOCAL_STORAGE_SHEET_KEY,
   LOCAL_STORAGE_SAVED_OPERATIONS,
   formatBelgianDateTime,
@@ -58,9 +59,6 @@ import { RecentOperationsList } from './components/RecentOperationsList';
 import { SpreadsheetSettingsModal } from './components/SpreadsheetSettingsModal';
 import { Footer } from './components/Footer';
 
-const DEFAULT_APPS_SCRIPT_URL =
-  'https://script.google.com/macros/s/AKfycbzGj_cRZYKrZ0oDqKVmegZpMoYdLWJhHHeMRTHJR4waX6cvKRjyT96dmQaTYZfPKgYBwA/exec';
-
 export default function App() {
   // Authentication state
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -74,8 +72,16 @@ export default function App() {
       const saved = localStorage.getItem(LOCAL_STORAGE_SHEET_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (!parsed.appsScriptUrl || parsed.appsScriptUrl.trim() === '') {
+        // Migration automatique : si l'URL est vide ou correspond à l'ancien script, on applique la nouvelle URL par défaut
+        if (
+          !parsed.appsScriptUrl ||
+          parsed.appsScriptUrl.trim() === '' ||
+          parsed.appsScriptUrl.includes('AKfycbxmzlZgSplShtZX')
+        ) {
           parsed.appsScriptUrl = DEFAULT_APPS_SCRIPT_URL;
+          try {
+            localStorage.setItem(LOCAL_STORAGE_SHEET_KEY, JSON.stringify({ ...parsed, appsScriptUrl: DEFAULT_APPS_SCRIPT_URL }));
+          } catch {}
         }
         if (!parsed.spreadsheetName || parsed.spreadsheetName.includes('Calcul des Points')) {
           parsed.spreadsheetName = 'Points RPA';
