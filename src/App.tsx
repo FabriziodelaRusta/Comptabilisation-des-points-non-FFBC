@@ -148,9 +148,10 @@ export default function App() {
   const [currentMotifToEdit, setCurrentMotifToEdit] = useState<MotifKey | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
 
-  // 3 Tabs : 1) Tableau des points (premier onglet), 2) Saisie unique, 3) Saisie multiple
-  const [activeTab, setActiveTab] = useState<'points-table' | 'single' | 'batch'>('points-table');
+  // 3 Tabs : 1) Tableau des points, 2) Saisie unique (par défaut au chargement), 3) Saisie multiple
+  const [activeTab, setActiveTab] = useState<'points-table' | 'single' | 'batch'>('single');
   const [batchConfirmationItems, setBatchConfirmationItems] = useState<BatchItem[] | null>(null);
+  const [batchFormResetKey, setBatchFormResetKey] = useState<number>(0);
 
   // Confirmation Modal state for mutating operations
   const [confirmationData, setConfirmationData] = useState<{
@@ -324,7 +325,8 @@ export default function App() {
                   membre: String(op.membre || ''),
                   points: Number(op.points) || 0,
                   motif: String(op.motif || ''),
-                  description: String(op.description || ''),
+                  km: op.km !== undefined && op.km !== null && String(op.km).trim() !== '' ? String(op.km) : '',
+                  description: String(op.description || op.motif || ''),
                   colF: isChecked,
                   isChecked: isChecked,
                   source: String(op.source || 'WebApp RPA'),
@@ -679,6 +681,7 @@ export default function App() {
         'success'
       );
       setBatchConfirmationItems(null);
+      setBatchFormResetKey((k) => k + 1);
     } catch (err: any) {
       console.error('Erreur insertion groupée:', err);
       showToast(err?.message || "Erreur lors de l'enregistrement groupé.", 'error');
@@ -976,7 +979,10 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('batch')}
+              onClick={() => {
+                setActiveTab('batch');
+                setBatchFormResetKey((k) => k + 1);
+              }}
               className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all transform duration-150 cursor-pointer hover:scale-[1.02] active:scale-[0.98] select-none ${
                 activeTab === 'batch'
                   ? 'bg-emerald-800 text-white shadow-md'
@@ -1105,6 +1111,7 @@ export default function App() {
             </div>
 
             <BatchOperationForm
+              key={`batch-form-${batchFormResetKey}`}
               members={membersWithPoints.filter((m) => m.nom !== 'Tous')}
               motifs={motifs}
               user={currentUser}

@@ -47,7 +47,7 @@ function getSheetCaseInsensitive(ss, targetName) {
 }
 
 // Détection intelligente des colonnes selon la ligne 1 (En-têtes)
-// Supporte automatiquement le nouveau schéma 9 colonnes (A à I) et l'ancien 8 colonnes (A à H)
+// Schéma strict 9 colonnes : Col A=Date rando, Col B=Membre, Col C=Points, Col D=Motif, Col E=Km, Col F=Case à cocher, Col G=Source, Col H=Mail, Col I=Date op
 function getOperationsColumnMapping(sheet) {
   var lastCol = Math.max(sheet.getLastColumn(), 9);
   var headerValues = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
@@ -58,18 +58,14 @@ function getOperationsColumnMapping(sheet) {
     membre: 2,         // Col B : Nom du membre
     points: 3,         // Col C : Points
     motif: 4,          // Col D : Motif
-    km: 5,             // Col E : Km
-    description: 5,    // Col E : Km (ou description pour compatibilité)
+    km: 5,             // Col E : Km (strictement Col E)
     checkbox: 6,       // Col F : Case à cocher vide
     source: 7,         // Col G : WebApp RPA
     mail: 8,           // Col H : Adresse mail de connexion
     dateOperation: 9   // Col I : Date de l'opération
   };
   
-  var hasMotifCol = false;
-  var hasDescCol = false;
-
-  // Si la ligne 1 contient des en-têtes réels, on s'adapte automatiquement
+  // Si la ligne 1 contient des en-têtes réels, on s'adapte
   for (var c = 0; c < headerValues.length; c++) {
     var h = String(headerValues[c] || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
     if (!h) continue;
@@ -80,13 +76,10 @@ function getOperationsColumnMapping(sheet) {
       mapping.membre = c + 1;
     } else if (h.includes('point') || h.includes('pts') || h.includes('score')) {
       mapping.points = c + 1;
-    } else if (h.includes('motif') || h.includes('activit') || h.includes('type')) {
-      mapping.motif = c + 1;
-      hasMotifCol = true;
-    } else if (h.includes('km') || h.includes('kilomet') || h.includes('dist') || h.includes('desc') || h.includes('remarque') || h.includes('detail') || h.includes('commentaire') || h.includes('objet')) {
+    } else if (h === 'km' || h.startsWith('km') || h.includes('kilomet') || h.includes('dist') || h.includes('borne')) {
       mapping.km = c + 1;
-      mapping.description = c + 1;
-      hasDescCol = true;
+    } else if (h.includes('motif') || h.includes('activit') || h.includes('type') || h.includes('desc') || h.includes('detail') || h.includes('remarque') || h.includes('objet')) {
+      mapping.motif = c + 1;
     } else if (h.includes('case') || h.includes('coch') || h.includes('check') || h.includes('valid') || h.includes('traite') || h.includes('vu')) {
       mapping.checkbox = c + 1;
     } else if (h.includes('source') || h.includes('webapp') || h.includes('app') || h.includes('origine')) {
@@ -98,14 +91,9 @@ function getOperationsColumnMapping(sheet) {
     }
   }
 
-  // Compatibilité avec ancienne feuille 8 colonnes sans colonne motif dédiée
-  if (!hasMotifCol && hasDescCol && lastCol <= 8) {
-    mapping.motif = mapping.description;
-    mapping.checkbox = 5;
-    mapping.source = 6;
-    mapping.mail = 7;
-    mapping.dateOperation = 8;
-  }
+  // Sécurité absolue : Col D est toujours le motif et Col E est toujours les Km
+  if (!mapping.motif) mapping.motif = 4;
+  if (!mapping.km) mapping.km = 5;
   
   return { mapping: mapping, maxCol: Math.max(lastCol, 9) };
 }
@@ -278,16 +266,17 @@ function doGet(e) {
       var isChecked = checkVal === true || String(checkVal).toUpperCase() === 'TRUE' || String(checkVal).toUpperCase() === 'VRAI' || checkVal === 1 || checkVal === '1';
 
       var motifVal = m.motif ? String(r[m.motif - 1] || '').trim() : '';
-      var descVal = String(r[m.description - 1] || '').trim();
+      var kmVal = m.km ? String(r[m.km - 1] || '').trim() : '';
 
       operations.push({
         rowNumber: k + 1,
         dateRando: dateRandoVal,
         membre: membreVal,
         points: parseInt(r[m.points - 1], 10) || 0,
-        motif: motifVal || descVal,
-        description: descVal || motifVal,
-        colE: isChecked,
+        motif: motifVal,
+        km: kmVal,
+        description: motifVal,
+        colE: kmVal,
         colF: isChecked,
         isChecked: isChecked,
         source: String(r[m.source - 1] || 'WebApp RPA').trim(),
@@ -354,8 +343,8 @@ function doPost(e) {
       rowValues[m.dateRando - 1] = body.dateRando || '';
       rowValues[m.membre - 1] = body.membre || '';
       rowValues[m.points - 1] = parseInt(body.points, 10) || 0;
-      if (m.motif) rowValues[m.motif - 1] = body.motif || body.description || '';
-      rowValues[(m.km || m.description) - 1] = body.km !== undefined && body.km !== null ? body.km : (body.description || '');
+      rowValues[m.motif - 1] = body.motif || body.description || '';
+      rowValues[m.km - 1] = body.km !== undefined && body.km !== null ? body.km : '';
       rowValues[m.checkbox - 1] = false;
       rowValues[m.source - 1] = 'WebApp RPA';
       rowValues[m.mail - 1] = body.mail || '';
@@ -406,8 +395,8 @@ function doPost(e) {
         rVal[m.dateRando - 1] = cur.dateRando || '';
         rVal[m.membre - 1] = cur.membre || '';
         rVal[m.points - 1] = parseInt(cur.points, 10) || 0;
-        if (m.motif) rVal[m.motif - 1] = cur.motif || cur.description || '';
-        rVal[(m.km || m.description) - 1] = cur.km !== undefined && cur.km !== null ? cur.km : (cur.description || '');
+        rVal[m.motif - 1] = cur.motif || cur.description || '';
+        rVal[m.km - 1] = cur.km !== undefined && cur.km !== null ? cur.km : '';
         rVal[m.checkbox - 1] = false;
         rVal[m.source - 1] = 'WebApp RPA';
         rVal[m.mail - 1] = cur.mail || body.mail || '';
@@ -456,8 +445,8 @@ function doPost(e) {
           sheet.getRange(targetRow, m.dateRando).setValue(body.dateRando || '');
           sheet.getRange(targetRow, m.membre).setValue(body.membre || '');
           sheet.getRange(targetRow, m.points).setValue(parseInt(body.points, 10) || 0);
-          if (m.motif) sheet.getRange(targetRow, m.motif).setValue(body.motif || body.description || '');
-          sheet.getRange(targetRow, m.km || m.description).setValue(body.km !== undefined && body.km !== null ? body.km : (body.description || ''));
+          sheet.getRange(targetRow, m.motif).setValue(body.motif || body.description || '');
+          sheet.getRange(targetRow, m.km).setValue(body.km !== undefined && body.km !== null ? body.km : '');
           sheet.getRange(targetRow, m.source).setValue('WebApp RPA');
           sheet.getRange(targetRow, m.mail).setValue(body.mail || '');
           sheet.getRange(targetRow, m.dateOperation).setValue(body.dateOperation || '');
@@ -1115,7 +1104,7 @@ export async function insertOperationToSheet(
         op.membre,
         op.points,
         op.motif || op.description,
-        op.km !== undefined && op.km !== '' ? op.km : (op.description || ''),
+        op.km !== undefined && op.km !== '' ? op.km : '',
         false, // Col F: Checkbox vide (case à cocher non cochée)
         'WebApp RPA', // Col G: Source
         op.mail,      // Col H: Adresse mail de connexion
@@ -1180,7 +1169,7 @@ export async function updateOperationInSheet(
           op.membre,
           op.points,
           op.motif || op.description,
-          op.km !== undefined && op.km !== '' ? op.km : (op.description || ''),
+          op.km !== undefined && op.km !== '' ? op.km : '',
           false, // Col F: Checkbox vide
           'WebApp RPA', // Col G: Source
           op.mail,      // Col H: Mail

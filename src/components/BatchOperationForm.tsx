@@ -61,11 +61,11 @@ export const BatchOperationForm: React.FC<BatchOperationFormProps> = ({
   const [selectedMemberNames, setSelectedMemberNames] = useState<string[]>([]);
   const [memberFilterText, setMemberFilterText] = useState<string>('');
 
-  // Initial row
+  // Initial row : aucun membre sélectionné par défaut
   const [rows, setRows] = useState<BatchItem[]>(() => [
     {
       id: `batch-${Date.now()}-0`,
-      membre: members.length > 0 ? members[0].nom : '',
+      membre: '',
       dateRando: getTodayStr(),
       points: DEFAULT_POINTS,
       motif: DEFAULT_MOTIF,
@@ -76,14 +76,13 @@ export const BatchOperationForm: React.FC<BatchOperationFormProps> = ({
 
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Add a single blank or default row
+  // Add a single blank row (aucun membre sélectionné)
   const handleAddRow = () => {
-    const nextMember = members.find((m) => !rows.some((r) => r.membre === m.nom))?.nom || (members[0]?.nom || '');
     setRows((prev) => [
       ...prev,
       {
         id: `batch-${Date.now()}-${prev.length}`,
-        membre: nextMember,
+        membre: '',
         dateRando: defaultDate || getTodayStr(),
         points: defaultPoints,
         motif: defaultMotif,

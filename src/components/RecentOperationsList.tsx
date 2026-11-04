@@ -87,13 +87,15 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
   const searchFiltered = memberFiltered.filter((op) => {
     const q = filterText.toLowerCase();
     const membreStr = (op.membre || '').toLowerCase();
-    const descStr = (op.description || '').toLowerCase();
+    const motifStr = (op.motif || op.description || '').toLowerCase();
+    const kmStr = String(op.km !== undefined && op.km !== null ? op.km : '').toLowerCase();
     const dateRandoStr = op.dateRando || '';
     const dateOpStr = op.dateOperation || '';
     const mailStr = (op.mail || '').toLowerCase();
     return (
       membreStr.includes(q) ||
-      descStr.includes(q) ||
+      motifStr.includes(q) ||
+      kmStr.includes(q) ||
       dateRandoStr.includes(q) ||
       dateOpStr.includes(q) ||
       mailStr.includes(q)
@@ -309,8 +311,8 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                     </td>
 
                     {/* Km (Col E) */}
-                    <td className="px-3.5 py-3 text-gray-800 font-semibold text-center whitespace-nowrap" title={op.km ? `${op.km} km` : op.description}>
-                      {op.km !== undefined && op.km !== '' ? `${op.km} km` : (op.description || '—')}
+                    <td className="px-3.5 py-3 text-gray-800 font-semibold text-center whitespace-nowrap" title={op.km ? `${op.km} km` : ''}>
+                      {op.km !== undefined && op.km !== null && String(op.km).trim() !== '' ? `${op.km} km` : '—'}
                     </td>
 
                     <td className="px-3.5 py-3 whitespace-nowrap">
