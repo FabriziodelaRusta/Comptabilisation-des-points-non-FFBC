@@ -1,8 +1,8 @@
 import { Member, MotifKey, OperationRecord, UserPermission } from '../types';
 import { getAccessToken } from './firebase';
 
-export const LOCAL_STORAGE_SHEET_KEY = 'rpa_sheets_config_v1';
-export const LOCAL_STORAGE_SAVED_OPERATIONS = 'rpa_cached_operations_v1';
+export const LOCAL_STORAGE_SHEET_KEY = 'rpa_sheets_config_v3';
+export const LOCAL_STORAGE_SAVED_OPERATIONS = 'rpa_cached_operations_v3';
 export const DEFAULT_APPS_SCRIPT_URL =
   'https://script.google.com/macros/s/AKfycbzGj_cRZYKrZ0oDqKVmegZpMoYdLWJhHHeMRTHJR4waX6cvKRjyT96dmQaTYZfPKgYBwA/exec';
 

@@ -48,7 +48,11 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
   onRecheckPermission,
 }) => {
   const [appsScriptUrl, setAppsScriptUrl] = useState(() => {
-    if (!config.appsScriptUrl || config.appsScriptUrl.includes('AKfycbxmzlZgSplShtZX')) {
+    if (
+      !config.appsScriptUrl ||
+      config.appsScriptUrl.includes('AKfycbxmzlZg') ||
+      config.appsScriptUrl.includes('AKfycbz3t7By')
+    ) {
       return DEFAULT_APPS_SCRIPT_URL;
     }
     return config.appsScriptUrl;

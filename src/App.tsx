@@ -72,11 +72,12 @@ export default function App() {
       const saved = localStorage.getItem(LOCAL_STORAGE_SHEET_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Migration automatique : si l'URL est vide ou correspond à l'ancien script, on applique la nouvelle URL par défaut
+        // Migration automatique : si l'URL est vide ou correspond à l'un des anciens tests, on applique la vraie URL officielle
         if (
           !parsed.appsScriptUrl ||
           parsed.appsScriptUrl.trim() === '' ||
-          parsed.appsScriptUrl.includes('AKfycbxmzlZgSplShtZX')
+          parsed.appsScriptUrl.includes('AKfycbxmzlZg') ||
+          parsed.appsScriptUrl.includes('AKfycbz3t7By')
         ) {
           parsed.appsScriptUrl = DEFAULT_APPS_SCRIPT_URL;
           try {
