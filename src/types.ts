@@ -20,12 +20,15 @@ export interface OperationRecord {
   dateRando: string;     // Col A: Date rando (jj/mm/aaaa)
   membre: string;        // Col B: Nom du membre
   points: number;        // Col C: Points
-  description: string;   // Col D: Description ou motif
-  colE?: boolean | string; // Col E: Case à cocher de validation
-  isChecked?: boolean;   // true si la case en colonne E est cochée (verrouille modif et suppression)
-  source?: string;       // Col F: "WebApp RPA"
-  mail: string;          // Col G: Adresse mail de connexion
-  dateOperation: string; // Col H: Date opération (jj/mm/aaaa hh:mm:ss)
+  motif?: string;        // Col D: Motif issu de la table Keys
+  km?: number | string;  // Col E: Km (distance en kilomètres)
+  description?: string;  // Compatibilité / description
+  colE?: boolean | string; // Compatibilité précédente
+  colF?: boolean | string; // Col F: Case à cocher de validation
+  isChecked?: boolean;   // true si la case en colonne F (ou E en 8 cols) est cochée
+  source?: string;       // Col G: "WebApp RPA" (auparavant Col F)
+  mail: string;          // Col H: Adresse mail de connexion (auparavant Col G)
+  dateOperation: string; // Col I: Date opération jj/mm/aaaa hh:mm:ss (auparavant Col H)
   syncedToGoogleSheets?: boolean;
 }
 

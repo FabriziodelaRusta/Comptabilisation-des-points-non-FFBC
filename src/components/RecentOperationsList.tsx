@@ -225,28 +225,33 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                   <span>Points</span>
                 </th>
 
-                {/* 4. Description with sort */}
+                {/* 4. Motif (Col D) */}
+                <th className="px-3 py-3 whitespace-nowrap">
+                  <span>Motif (Col D)</span>
+                </th>
+
+                {/* 5. Km (Col E) */}
                 <th
                   onClick={() => handleSort('description')}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                  className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group text-center"
                 >
-                  <div className="flex items-center gap-1">
-                    <span>Description / Motif</span>
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Km (Col E)</span>
                     {renderSortIcon('description')}
                   </div>
                 </th>
 
-                {/* 5. Source (Col F) */}
+                {/* 6. Source (Col G) */}
                 <th className="px-3.5 py-3 whitespace-nowrap">
                   <span>Source</span>
                 </th>
 
-                {/* 6. Mail Connexion (Col G) */}
+                {/* 7. Mail Connexion (Col H) */}
                 <th className="px-3.5 py-3">
-                  <span>Mail connexion</span>
+                  <span>Mail</span>
                 </th>
 
-                {/* 7. Date Opération with sort (Col H) */}
+                {/* 8. Date Opération with sort (Col I) */}
                 <th
                   onClick={() => handleSort('dateOperation')}
                   className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
@@ -257,7 +262,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                   </div>
                 </th>
 
-                {/* 8. Actions */}
+                {/* 9. Actions */}
                 <th className="px-3.5 py-3 text-right">
                   <span>Actions</span>
                 </th>
@@ -298,8 +303,14 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                       </span>
                     </td>
 
-                    <td className="px-3.5 py-3 text-gray-800 font-medium max-w-xs truncate">
-                      {op.description}
+                    {/* Motif (Col D) */}
+                    <td className="px-3 py-3 text-gray-700 text-xs font-semibold whitespace-nowrap max-w-[140px] truncate" title={op.motif || op.description}>
+                      {op.motif || op.description}
+                    </td>
+
+                    {/* Km (Col E) */}
+                    <td className="px-3.5 py-3 text-gray-800 font-semibold text-center whitespace-nowrap" title={op.km ? `${op.km} km` : op.description}>
+                      {op.km !== undefined && op.km !== '' ? `${op.km} km` : (op.description || '—')}
                     </td>
 
                     <td className="px-3.5 py-3 whitespace-nowrap">

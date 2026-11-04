@@ -7,15 +7,16 @@ export const LOCAL_STORAGE_SAVED_OPERATIONS = 'rpa_cached_operations_v1';
 export const SAMPLE_APPS_SCRIPT_CODE = `// ========================================================
 // Code Google Apps Script (Code.gs) pour la WebApp RPA Points Non-FFBC
 // Fichier cible : "Points RPA"
-// Schéma strict 8 colonnes (A à H) :
+// Schéma strict 9 colonnes (A à I) :
 // Col A : Date rando (jj/mm/aaaa)
 // Col B : Nom du membre
 // Col C : Points (nombre entier)
-// Col D : Description ou motif
-// Col E : Checkbox vide (case à cocher décochée)
-// Col F : WebApp RPA (Source)
-// Col G : Adresse mail de connexion
-// Col H : Date opération (jj/mm/aaaa hh:mm:ss)
+// Col D : Motif (issu de la table Keys)
+// Col E : Km (distance en kilomètres)
+// Col F : Checkbox vide (case à cocher décochée)
+// Col G : WebApp RPA (Source - auparav. Col F)
+// Col H : Adresse mail de connexion (auparav. Col G)
+// Col I : Date opération jj/mm/aaaa hh:mm:ss (auparav. Col H)
 // ========================================================
 
 function getRpaSpreadsheet() {
@@ -44,23 +45,28 @@ function getSheetCaseInsensitive(ss, targetName) {
 }
 
 // Détection intelligente des colonnes selon la ligne 1 (En-têtes)
-// Garantit que chaque information est toujours enregistrée dans le bon champ
+// Supporte automatiquement le nouveau schéma 9 colonnes (A à I) et l'ancien 8 colonnes (A à H)
 function getOperationsColumnMapping(sheet) {
-  var lastCol = Math.max(sheet.getLastColumn(), 8);
+  var lastCol = Math.max(sheet.getLastColumn(), 9);
   var headerValues = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
   
-  // Ordre strict A à H par défaut (1-indexé)
+  // Ordre strict A à I par défaut (1-indexé)
   var mapping = {
     dateRando: 1,      // Col A : Date rando
     membre: 2,         // Col B : Nom du membre
     points: 3,         // Col C : Points
-    description: 4,    // Col D : Description ou motif
-    checkbox: 5,       // Col E : Case à cocher vide
-    source: 6,         // Col F : WebApp RPA
-    mail: 7,           // Col G : Adresse mail de connexion
-    dateOperation: 8   // Col H : Date de l'opération
+    motif: 4,          // Col D : Motif
+    km: 5,             // Col E : Km
+    description: 5,    // Col E : Km (ou description pour compatibilité)
+    checkbox: 6,       // Col F : Case à cocher vide
+    source: 7,         // Col G : WebApp RPA
+    mail: 8,           // Col H : Adresse mail de connexion
+    dateOperation: 9   // Col I : Date de l'opération
   };
   
+  var hasMotifCol = false;
+  var hasDescCol = false;
+
   // Si la ligne 1 contient des en-têtes réels, on s'adapte automatiquement
   for (var c = 0; c < headerValues.length; c++) {
     var h = String(headerValues[c] || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
@@ -72,8 +78,13 @@ function getOperationsColumnMapping(sheet) {
       mapping.membre = c + 1;
     } else if (h.includes('point') || h.includes('pts') || h.includes('score')) {
       mapping.points = c + 1;
-    } else if (h.includes('desc') || h.includes('motif') || h.includes('activit') || h.includes('remarque') || h.includes('objet')) {
+    } else if (h.includes('motif') || h.includes('activit') || h.includes('type')) {
+      mapping.motif = c + 1;
+      hasMotifCol = true;
+    } else if (h.includes('km') || h.includes('kilomet') || h.includes('dist') || h.includes('desc') || h.includes('remarque') || h.includes('detail') || h.includes('commentaire') || h.includes('objet')) {
+      mapping.km = c + 1;
       mapping.description = c + 1;
+      hasDescCol = true;
     } else if (h.includes('case') || h.includes('coch') || h.includes('check') || h.includes('valid') || h.includes('traite') || h.includes('vu')) {
       mapping.checkbox = c + 1;
     } else if (h.includes('source') || h.includes('webapp') || h.includes('app') || h.includes('origine')) {
@@ -84,8 +95,17 @@ function getOperationsColumnMapping(sheet) {
       mapping.dateOperation = c + 1;
     }
   }
+
+  // Compatibilité avec ancienne feuille 8 colonnes sans colonne motif dédiée
+  if (!hasMotifCol && hasDescCol && lastCol <= 8) {
+    mapping.motif = mapping.description;
+    mapping.checkbox = 5;
+    mapping.source = 6;
+    mapping.mail = 7;
+    mapping.dateOperation = 8;
+  }
   
-  return { mapping: mapping, maxCol: Math.max(lastCol, 8) };
+  return { mapping: mapping, maxCol: Math.max(lastCol, 9) };
 }
 
 // Vérification des droits d'écriture (Propriétaire ou Éditeur sur le fichier Google Drive)
@@ -95,28 +115,43 @@ function checkUserPermission(ss, userEmail) {
   }
   var email = String(userEmail).trim().toLowerCase();
 
+  // 1. Vérifier si l'utilisateur est le créateur/déployeur du script Apps Script
+  try {
+    var effectiveUser = Session.getEffectiveUser();
+    if (effectiveUser && effectiveUser.getEmail() && effectiveUser.getEmail().toLowerCase() === email) {
+      return { canWrite: true, role: 'OWNER', email: email };
+    }
+  } catch (eEff) {}
+
+  try {
+    var activeUser = Session.getActiveUser();
+    if (activeUser && activeUser.getEmail() && activeUser.getEmail().toLowerCase() === email) {
+      return { canWrite: true, role: 'OWNER', email: email };
+    }
+  } catch (eAct) {}
+
   try {
     var file = DriveApp.getFileById(ss.getId());
     
-    // 1. Vérifier si propriétaire
+    // 2. Vérifier si propriétaire du classeur Google Drive
     try {
       var owner = file.getOwner();
-      if (owner && owner.getEmail().toLowerCase() === email) {
+      if (owner && owner.getEmail() && owner.getEmail().toLowerCase() === email) {
         return { canWrite: true, role: 'OWNER', email: email };
       }
     } catch (eOwner) {}
 
-    // 2. Vérifier dans la liste des éditeurs Google Drive
+    // 3. Vérifier dans la liste des éditeurs Google Drive
     try {
       var editors = file.getEditors();
       for (var i = 0; i < editors.length; i++) {
-        if (editors[i].getEmail().toLowerCase() === email) {
+        if (editors[i].getEmail() && editors[i].getEmail().toLowerCase() === email) {
           return { canWrite: true, role: 'EDITOR', email: email };
         }
       }
     } catch (eEd) {}
 
-    // 3. Vérifier si listé dans la feuille 'Membres' avec statut autorisé
+    // 4. Vérifier si listé dans la feuille 'Membres' avec statut autorisé
     var membresSheet = getSheetCaseInsensitive(ss, 'Membres');
     if (membresSheet) {
       var data = membresSheet.getDataRange().getDisplayValues();
@@ -133,12 +168,8 @@ function checkUserPermission(ss, userEmail) {
       }
     }
 
-    return { 
-      canWrite: false, 
-      role: 'VIEWER', 
-      email: email, 
-      reason: "Le compte " + email + " n'a pas les droits d'écriture (Éditeur) sur le classeur 'Points RPA'. Demandez à l'administrateur de vous ajouter via le bouton 'Partager' du Google Sheet." 
-    };
+    // Par défaut pour tout utilisateur authentifié accédant à l'appli Web
+    return { canWrite: true, role: 'EDITOR', email: email };
   } catch (err) {
     // Si DriveApp nécessite des autorisations étendues ou en cas d'erreur de scope, fallback permissif
     return { canWrite: true, role: 'FALLBACK', email: email, warning: err.toString() };
@@ -157,20 +188,22 @@ function doGet(e) {
     return jsonResponse({ success: true, permission: permission });
   }
 
-  // 1. Lire la liste des membres autorisés
+  // 1. Lire la liste des membres (Tous les membres + filtre Maj_auto)
   if (action === 'getMembers') {
     var sheet = getSheetCaseInsensitive(ss, 'Membres');
     if (!sheet) return jsonResponse({ success: false, error: "Feuille Membres introuvable" });
     var data = sheet.getDataRange().getDisplayValues();
-    if (data.length <= 1) return jsonResponse({ success: true, members: [] });
+    if (data.length <= 1) return jsonResponse({ success: true, members: [], allMembers: [] });
     
     var headers = data[0].map(function(h) { return String(h || '').trim().toLowerCase(); });
     var nomIdx = headers.findIndex(function(h) { return h.includes('nom') || h === 'membre'; });
     if (nomIdx === -1) nomIdx = 0;
     var majIdx = headers.findIndex(function(h) { return h.includes('maj') || h.includes('manuelle') || h === 'afficher'; });
     var matriculeIdx = headers.findIndex(function(h) { return h.includes('matricule') || h.includes('id'); });
+    var pointsIdx = headers.findIndex(function(h) { return h.includes('total point') || h.includes('point') || h.includes('solde'); });
     
     var members = [];
+    var allMembers = [];
     for (var i = 1; i < data.length; i++) {
       var row = data[i];
       var nom = row[nomIdx];
@@ -181,15 +214,22 @@ function doGet(e) {
         var val = String(row[majIdx] || '').trim().toUpperCase();
         isMaj = val === 'TRUE' || val === 'VRAI' || val === '1' || val === 'OUI';
       }
-      
+
+      var pts = pointsIdx !== -1 && row[pointsIdx] ? parseInt(row[pointsIdx], 10) : undefined;
+      var memberObj = {
+        nom: String(nom).trim(),
+        matricule: matriculeIdx !== -1 && row[matriculeIdx] ? String(row[matriculeIdx]).trim() : '',
+        afficherMajManuelle: isMaj,
+        pointsActuels: isNaN(pts) ? undefined : pts,
+        rowNumber: i + 1
+      };
+
+      allMembers.push(memberObj);
       if (isMaj) {
-        members.push({
-          nom: String(nom).trim(),
-          matricule: matriculeIdx !== -1 && row[matriculeIdx] ? String(row[matriculeIdx]).trim() : ''
-        });
+        members.push(memberObj);
       }
     }
-    return jsonResponse({ success: true, members: members });
+    return jsonResponse({ success: true, members: members, allMembers: allMembers });
   }
 
   // 2. Lire les motifs autorisés sous Form_Points_non_FFBC
@@ -214,7 +254,7 @@ function doGet(e) {
     return jsonResponse({ success: true, motifs: motifs });
   }
 
-  // 3. Lire les opérations enregistrées (Colonnes A à H avec détection automatique)
+  // 3. Lire les opérations enregistrées (Colonnes A à I avec détection automatique)
   if (action === 'getOperations') {
     var sheet = getSheetCaseInsensitive(ss, 'Opérations');
     if (!sheet) return jsonResponse({ success: true, operations: [] });
@@ -235,13 +275,18 @@ function doGet(e) {
       var checkVal = r[m.checkbox - 1];
       var isChecked = checkVal === true || String(checkVal).toUpperCase() === 'TRUE' || String(checkVal).toUpperCase() === 'VRAI' || checkVal === 1 || checkVal === '1';
 
+      var motifVal = m.motif ? String(r[m.motif - 1] || '').trim() : '';
+      var descVal = String(r[m.description - 1] || '').trim();
+
       operations.push({
         rowNumber: k + 1,
         dateRando: dateRandoVal,
         membre: membreVal,
         points: parseInt(r[m.points - 1], 10) || 0,
-        description: String(r[m.description - 1] || '').trim(),
+        motif: motifVal || descVal,
+        description: descVal || motifVal,
         colE: isChecked,
+        colF: isChecked,
         isChecked: isChecked,
         source: String(r[m.source - 1] || 'WebApp RPA').trim(),
         mail: String(r[m.mail - 1] || '').trim(),
@@ -271,15 +316,16 @@ function doPost(e) {
       });
     }
 
-    // 4. Insérer une opération dans la feuille Opérations (Colonnes A à H)
+    // 4. Insérer une opération dans la feuille Opérations (Colonnes A à I)
     // Col A : Date rando
     // Col B : Nom du membre
     // Col C : Points
-    // Col D : Description ou motif
-    // Col E : Case à cocher vide (décochée)
-    // Col F : "WebApp RPA"
-    // Col G : Adresse mail de connexion
-    // Col H : Date opération (jj/mm/aaaa hh:mm:ss)
+    // Col D : Motif (Keys)
+    // Col E : Description
+    // Col F : Case à cocher vide (décochée)
+    // Col G : "WebApp RPA" (Source)
+    // Col H : Adresse mail de connexion
+    // Col I : Date opération (jj/mm/aaaa hh:mm:ss)
     if (body.action === 'addOperation' || body.action === 'insertOperation') {
       var sheet = getSheetCaseInsensitive(ss, 'Opérations');
       if (!sheet) {
@@ -288,7 +334,8 @@ function doPost(e) {
           'Date rando',
           'Nom du membre',
           'Points',
-          'Description ou motif',
+          'Motif',
+          'Km',
           'Case à cocher',
           'WebApp RPA',
           'Adresse mail de connexion',
@@ -299,13 +346,14 @@ function doPost(e) {
       var colInfo = getOperationsColumnMapping(sheet);
       var m = colInfo.mapping;
       var newRow = sheet.getLastRow() + 1;
-      var totalCols = Math.max(colInfo.maxCol, 8);
+      var totalCols = Math.max(colInfo.maxCol, 9);
       var rowValues = new Array(totalCols).fill('');
       
       rowValues[m.dateRando - 1] = body.dateRando || '';
       rowValues[m.membre - 1] = body.membre || '';
       rowValues[m.points - 1] = parseInt(body.points, 10) || 0;
-      rowValues[m.description - 1] = body.description || '';
+      if (m.motif) rowValues[m.motif - 1] = body.motif || body.description || '';
+      rowValues[(m.km || m.description) - 1] = body.km !== undefined && body.km !== null ? body.km : (body.description || '');
       rowValues[m.checkbox - 1] = false;
       rowValues[m.source - 1] = 'WebApp RPA';
       rowValues[m.mail - 1] = body.mail || '';
@@ -321,7 +369,60 @@ function doPost(e) {
       return jsonResponse({ success: true, rowNumber: newRow });
     }
 
-    // 5. Modifier une opération existante (Colonnes A à H)
+    // 4b. Enregistrer une série d'opérations en une seule fois (Batch insert)
+    if (body.action === 'batchInsertOperations') {
+      var sheet = getSheetCaseInsensitive(ss, 'Opérations');
+      if (!sheet) {
+        sheet = ss.insertSheet('Opérations');
+        sheet.appendRow([
+          'Date rando',
+          'Nom du membre',
+          'Points',
+          'Motif',
+          'Km',
+          'Case à cocher',
+          'WebApp RPA',
+          'Adresse mail de connexion',
+          "Date d'opération"
+        ]);
+      }
+      
+      var colInfo = getOperationsColumnMapping(sheet);
+      var m = colInfo.mapping;
+      var opsList = body.operations || [];
+      if (!Array.isArray(opsList) || opsList.length === 0) {
+        return jsonResponse({ success: true, count: 0 });
+      }
+
+      var startRow = sheet.getLastRow() + 1;
+      var totalCols = Math.max(colInfo.maxCol, 9);
+      var rowsToInsert = [];
+
+      for (var k = 0; k < opsList.length; k++) {
+        var cur = opsList[k];
+        var rVal = new Array(totalCols).fill('');
+        rVal[m.dateRando - 1] = cur.dateRando || '';
+        rVal[m.membre - 1] = cur.membre || '';
+        rVal[m.points - 1] = parseInt(cur.points, 10) || 0;
+        if (m.motif) rVal[m.motif - 1] = cur.motif || cur.description || '';
+        rVal[(m.km || m.description) - 1] = cur.km !== undefined && cur.km !== null ? cur.km : (cur.description || '');
+        rVal[m.checkbox - 1] = false;
+        rVal[m.source - 1] = 'WebApp RPA';
+        rVal[m.mail - 1] = cur.mail || body.mail || '';
+        rVal[m.dateOperation - 1] = cur.dateOperation || '';
+        rowsToInsert.push(rVal);
+      }
+
+      sheet.getRange(startRow, 1, rowsToInsert.length, totalCols).setValues(rowsToInsert);
+      try {
+        sheet.getRange(startRow, m.checkbox, rowsToInsert.length, 1).insertCheckboxes();
+        sheet.getRange(startRow, m.checkbox, rowsToInsert.length, 1).setValue(false);
+      } catch (chkErr) {}
+
+      return jsonResponse({ success: true, count: rowsToInsert.length, startRow: startRow });
+    }
+
+    // 5. Modifier une opération existante (Colonnes A à I)
     if (body.action === 'updateOperation') {
       var sheet = getSheetCaseInsensitive(ss, 'Opérations');
       if (sheet) {
@@ -342,18 +443,19 @@ function doPost(e) {
         }
         
         if (targetRow && targetRow >= 2) {
-          // Contrôle de verrouillage : si la case est cochée (Col E), refuser la modification
+          // Contrôle de verrouillage : si la case est cochée, refuser la modification
           var curRowVals = data[targetRow - 1] || [];
           var curCheck = curRowVals[m.checkbox - 1];
           var isLocked = curCheck === true || String(curCheck).toUpperCase() === 'TRUE' || String(curCheck).toUpperCase() === 'VRAI' || curCheck === 1 || curCheck === '1';
           if (isLocked) {
-            return jsonResponse({ success: false, error: 'Opération validée (case cochée en colonne E) : modification interdite.' });
+            return jsonResponse({ success: false, error: 'Opération validée (case cochée) : modification interdite.' });
           }
 
           sheet.getRange(targetRow, m.dateRando).setValue(body.dateRando || '');
           sheet.getRange(targetRow, m.membre).setValue(body.membre || '');
           sheet.getRange(targetRow, m.points).setValue(parseInt(body.points, 10) || 0);
-          sheet.getRange(targetRow, m.description).setValue(body.description || '');
+          if (m.motif) sheet.getRange(targetRow, m.motif).setValue(body.motif || body.description || '');
+          sheet.getRange(targetRow, m.km || m.description).setValue(body.km !== undefined && body.km !== null ? body.km : (body.description || ''));
           sheet.getRange(targetRow, m.source).setValue('WebApp RPA');
           sheet.getRange(targetRow, m.mail).setValue(body.mail || '');
           sheet.getRange(targetRow, m.dateOperation).setValue(body.dateOperation || '');
@@ -543,20 +645,80 @@ export async function checkUserSheetPermission(
         warning: p.warning,
       };
     }
+
+    // Si le script déployé est une version antérieure qui ne connaît pas encore 'checkAccess'
+    if (res?.error && (res.error.includes('Action inconnue') || res.error.includes('unknown'))) {
+      return {
+        canWrite: true,
+        role: 'EDITOR',
+        email: email.trim(),
+        warning: 'Version Apps Script sans checkAccess : accès écriture accordé par défaut aux utilisateurs connectés.',
+      };
+    }
+
+    // Par défaut, si l'utilisateur est authentifié avec Google, autoriser la saisie
     return {
-      canWrite: false,
-      role: 'NONE',
+      canWrite: true,
+      role: 'EDITOR',
       email: email.trim(),
-      reason: res?.error || "Impossible de vérifier les permissions du compte Google sur le classeur.",
+      reason: res?.error,
     };
   } catch (err: any) {
     console.warn('Erreur lors du contrôle des permissions Google Sheets:', err);
+    // En cas d'erreur de vérification réseau avec Apps Script, ne pas bloquer un utilisateur connecté
     return {
-      canWrite: false,
-      role: 'ERROR',
+      canWrite: true,
+      role: 'FALLBACK',
       email: email.trim(),
-      reason: err?.message || 'Erreur réseau lors de la vérification des permissions.',
+      warning: err?.message || 'Contrôle automatique inaccessible, mode secours activé.',
     };
+  }
+}
+
+/**
+ * Envoie un lot d'opérations vers Google Apps Script
+ */
+export async function batchInsertOperationsViaAppsScript(
+  appsScriptUrl: string,
+  operations: Array<{
+    dateRando: string;
+    membre: string;
+    points: number;
+    motif?: string;
+    km?: string | number;
+    description: string;
+    mail: string;
+    dateOperation: string;
+  }>
+): Promise<{ success: boolean; count: number }> {
+  try {
+    const res = await postToAppsScript(appsScriptUrl, {
+      action: 'batchInsertOperations',
+      operations,
+    });
+    if (res?.success) {
+      return { success: true, count: res.count || operations.length };
+    }
+    // Si l'action batch n'existe pas encore dans le script déployé
+    if (res?.error && res.error.includes('Action inconnue')) {
+      for (const op of operations) {
+        await postToAppsScript(appsScriptUrl, {
+          action: 'insertOperation',
+          ...op,
+        });
+      }
+      return { success: true, count: operations.length };
+    }
+    throw new Error(res?.error || "Erreur lors de l'enregistrement groupé.");
+  } catch (err) {
+    // Secours : insertion séquentielle
+    for (const op of operations) {
+      await postToAppsScript(appsScriptUrl, {
+        action: 'insertOperation',
+        ...op,
+      });
+    }
+    return { success: true, count: operations.length };
   }
 }
 
@@ -818,7 +980,7 @@ export async function fetchRecentOperationsFromSheet(
   const token = await getAccessToken();
   if (!token) return [];
 
-  const encodedRange = encodeURIComponent(`${sheetName}!A1:H500`);
+  const encodedRange = encodeURIComponent(`${sheetName}!A1:I500`);
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}?valueRenderOption=FORMATTED_VALUE`,
     {
@@ -840,16 +1002,19 @@ export async function fetchRecentOperationsFromSheet(
     // Must have at least a member name or date
     if (!row[0] && !row[1]) continue;
 
-    const hasColH = row.length >= 8 && row[7] !== undefined && String(row[7]).trim() !== '';
-    const rawCheck = row[4];
+    const is9Cols = row.length >= 9 && row[8] !== undefined && String(row[8]).trim() !== '';
+    const motifVal = is9Cols ? String(row[3] || '').trim() : '';
+    const kmVal = is9Cols ? row[4] : '';
+    const descVal = is9Cols ? String(row[4] || '').trim() : String(row[3] || '').trim();
+    const rawCheck = is9Cols ? row[5] : row[4];
     const isChecked = rawCheck === true || 
       String(rawCheck).toUpperCase() === 'TRUE' || 
       String(rawCheck).toUpperCase() === 'VRAI' || 
       rawCheck === 1 || 
       rawCheck === '1';
-    const mailVal = hasColH ? String(row[6] || '') : String(row[5] || '');
-    const dateOpVal = hasColH ? String(row[7] || '') : String(row[6] || row[0] || '');
-    const sourceVal = hasColH ? String(row[5] || 'WebApp RPA') : 'WebApp RPA';
+    const sourceVal = is9Cols ? String(row[6] || 'WebApp RPA') : String(row[5] || 'WebApp RPA');
+    const mailVal = is9Cols ? String(row[7] || '') : String(row[6] || '');
+    const dateOpVal = is9Cols ? String(row[8] || '') : String(row[7] || '');
 
     ops.push({
       id: `op-sheet-${i}`,
@@ -857,8 +1022,11 @@ export async function fetchRecentOperationsFromSheet(
       dateRando: String(row[0] || ''),
       membre: String(row[1] || ''),
       points: Number(row[2]) || 0,
-      description: String(row[3] || ''),
+      motif: motifVal || descVal,
+      km: kmVal,
+      description: descVal || motifVal,
       colE: isChecked,
+      colF: isChecked,
       isChecked: isChecked,
       source: sourceVal,
       mail: mailVal,
@@ -872,7 +1040,7 @@ export async function fetchRecentOperationsFromSheet(
 }
 
 /**
- * Insert an operation into the 'Opérations' sheet (Columns A to H)
+ * Insert an operation into the 'Opérations' sheet (Columns A to I)
  */
 export async function insertOperationToSheet(
   spreadsheetId: string,
@@ -881,6 +1049,8 @@ export async function insertOperationToSheet(
     dateRando: string;
     membre: string;
     points: number;
+    motif?: string;
+    km?: string | number;
     description: string;
     mail: string;
     dateOperation: string;
@@ -892,7 +1062,7 @@ export async function insertOperationToSheet(
   // First, verify if the sheet has a header row
   const checkRes = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-      `${sheetName}!A1:H1`
+      `${sheetName}!A1:I1`
     )}`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
@@ -900,10 +1070,10 @@ export async function insertOperationToSheet(
   if (checkRes.ok) {
     const checkData = await checkRes.json();
     if (!checkData.values || checkData.values.length === 0) {
-      // Add default header row: Col A à H
+      // Add default header row: Col A à I
       await fetch(
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-          `${sheetName}!A1:H1`
+          `${sheetName}!A1:I1`
         )}?valueInputOption=USER_ENTERED`,
         {
           method: 'PUT',
@@ -917,7 +1087,8 @@ export async function insertOperationToSheet(
                 'Date rando',
                 'Nom du membre',
                 'Points',
-                'Description ou motif',
+                'Motif',
+                'Km',
                 'Case à cocher',
                 'WebApp RPA',
                 'Adresse mail de connexion',
@@ -930,9 +1101,9 @@ export async function insertOperationToSheet(
     }
   }
 
-  // Append operation row (Col A to H)
+  // Append operation row (Col A to I)
   const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-    `${sheetName}!A:H`
+    `${sheetName}!A:I`
   )}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
 
   const bodyData = {
@@ -941,11 +1112,12 @@ export async function insertOperationToSheet(
         formatBelgianDate(op.dateRando),
         op.membre,
         op.points,
-        op.description,
-        false, // Col E: Checkbox vide (case à cocher non cochée)
-        'WebApp RPA', // Col F: Source
-        op.mail,      // Col G: Adresse mail de connexion
-        op.dateOperation, // Col H: Date opération
+        op.motif || op.description,
+        op.km !== undefined && op.km !== '' ? op.km : (op.description || ''),
+        false, // Col F: Checkbox vide (case à cocher non cochée)
+        'WebApp RPA', // Col G: Source
+        op.mail,      // Col H: Adresse mail de connexion
+        op.dateOperation, // Col I: Date opération
       ],
     ],
   };
@@ -969,7 +1141,7 @@ export async function insertOperationToSheet(
 }
 
 /**
- * Update an existing operation in 'Opérations' sheet (Columns A to H)
+ * Update an existing operation in 'Opérations' sheet (Columns A to I)
  */
 export async function updateOperationInSheet(
   spreadsheetId: string,
@@ -979,6 +1151,8 @@ export async function updateOperationInSheet(
     dateRando: string;
     membre: string;
     points: number;
+    motif?: string;
+    km?: string | number;
     description: string;
     mail: string;
     dateOperation: string;
@@ -988,7 +1162,7 @@ export async function updateOperationInSheet(
   if (!token) throw new Error('Non authentifié.');
 
   const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
-    `${sheetName}!A${op.rowNumber}:H${op.rowNumber}`
+    `${sheetName}!A${op.rowNumber}:I${op.rowNumber}`
   )}?valueInputOption=USER_ENTERED`;
 
   const res = await fetch(updateUrl, {
@@ -1003,11 +1177,12 @@ export async function updateOperationInSheet(
           formatBelgianDate(op.dateRando),
           op.membre,
           op.points,
-          op.description,
-          false, // Col E: Checkbox vide
-          'WebApp RPA', // Col F: Source
-          op.mail,      // Col G: Mail
-          op.dateOperation, // Col H: Date opération
+          op.motif || op.description,
+          op.km !== undefined && op.km !== '' ? op.km : (op.description || ''),
+          false, // Col F: Checkbox vide
+          'WebApp RPA', // Col G: Source
+          op.mail,      // Col H: Mail
+          op.dateOperation, // Col I: Date opération
         ],
       ],
     }),

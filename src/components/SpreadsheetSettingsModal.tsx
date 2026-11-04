@@ -47,8 +47,7 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
   onRecheckPermission,
 }) => {
   const DEFAULT_APPS_SCRIPT_URL =
-    'https://script.google.com/macros/s/AKfycbz3t7ByQbAA6A5bdZoDRkceWQG-mqqWV23UqckdjiyPngOcwfy9TlhBx07qUU9Ci2EiGg/exec';
-
+   'https://script.google.com/macros/s/AKfycbzGj_cRZYKrZ0oDqKVmegZpMoYdLWJhHHeMRTHJR4waX6cvKRjyT96dmQaTYZfPKgYBwA/exec;
   const [appsScriptUrl, setAppsScriptUrl] = useState(
     config.appsScriptUrl || DEFAULT_APPS_SCRIPT_URL
   );
@@ -296,16 +295,17 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
                     </div>
                     {testResult.detectedColumns && (
                       <div className="mt-2 p-2 bg-white/80 rounded-lg border border-emerald-300 text-[11px] text-emerald-950 font-mono">
-                        <div className="font-bold mb-1 text-emerald-900">Mappage des colonnes (A à H) :</div>
+                        <div className="font-bold mb-1 text-emerald-900">Mappage des colonnes (A à I) :</div>
                         <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10.5px]">
                           <div>• Col A (Date rando) : index {testResult.detectedColumns.dateRando}</div>
                           <div>• Col B (Membre) : index {testResult.detectedColumns.membre}</div>
                           <div>• Col C (Points) : index {testResult.detectedColumns.points}</div>
-                          <div>• Col D (Motif) : index {testResult.detectedColumns.description}</div>
-                          <div>• Col E (Checkbox) : index {testResult.detectedColumns.checkbox}</div>
-                          <div>• Col F (Source) : index {testResult.detectedColumns.source}</div>
-                          <div>• Col G (Mail) : index {testResult.detectedColumns.mail}</div>
-                          <div>• Col H (Date opération) : index {testResult.detectedColumns.dateOperation}</div>
+                          <div>• Col D (Motif) : index {testResult.detectedColumns.motif || testResult.detectedColumns.description}</div>
+                          <div>• Col E (Km) : index {testResult.detectedColumns.km || testResult.detectedColumns.description}</div>
+                          <div>• Col F (Checkbox) : index {testResult.detectedColumns.checkbox}</div>
+                          <div>• Col G (Source) : index {testResult.detectedColumns.source}</div>
+                          <div>• Col H (Mail) : index {testResult.detectedColumns.mail}</div>
+                          <div>• Col I (Date opération) : index {testResult.detectedColumns.dateOperation}</div>
                         </div>
                       </div>
                     )}
@@ -340,7 +340,7 @@ export const SpreadsheetSettingsModal: React.FC<SpreadsheetSettingsModalProps> =
               </button>
             </div>
             <p className="text-[11.5px] text-slate-600 leading-relaxed">
-              Ce script intègre la détection automatique des colonnes A à H, la case à cocher native en colonne E, le verrouillage des lignes validées, et le contrôle des droits d'écriture (Éditeurs Drive).
+              Ce script intègre la détection automatique des colonnes A à I (avec Km en colonne E), la case à cocher native en colonne F, le verrouillage des lignes validées, et le contrôle des droits d'écriture (Éditeurs Drive).
             </p>
             <div className="bg-slate-900 rounded-xl p-3 text-[11px] font-mono text-emerald-300 max-h-24 overflow-y-auto select-all">
               <pre className="whitespace-pre-wrap">{SAMPLE_APPS_SCRIPT_CODE.slice(0, 500)}... (cliquez sur Copier pour le code complet)</pre>

@@ -30,7 +30,9 @@ interface OperationFormProps {
   onSubmit: (operationData: {
     dateRando: string;
     points: number;
-    description: string;
+    motif: string;
+    km: string | number;
+    description?: string;
   }) => void;
   isLoading: boolean;
 }
@@ -68,7 +70,7 @@ export const OperationForm: React.FC<OperationFormProps> = ({
     return dateStr;
   };
 
-  const DEFAULT_DESCRIPTION = 'Rando VTT non FFBC (+1 pts)';
+  const DEFAULT_MOTIF = 'Rando VTT non FFBC (+1 pts)';
   const DEFAULT_POINTS = 1;
 
   const [dateRando, setDateRando] = useState<string>(
@@ -79,8 +81,11 @@ export const OperationForm: React.FC<OperationFormProps> = ({
       ? editingOperation.points
       : DEFAULT_POINTS
   );
-  const [description, setDescription] = useState<string>(
-    editingOperation ? editingOperation.description || '' : DEFAULT_DESCRIPTION
+  const [motif, setMotif] = useState<string>(
+    editingOperation ? editingOperation.motif || DEFAULT_MOTIF : DEFAULT_MOTIF
+  );
+  const [km, setKm] = useState<string | number>(
+    editingOperation ? (editingOperation.km !== undefined ? editingOperation.km : '') : ''
   );
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -93,12 +98,15 @@ export const OperationForm: React.FC<OperationFormProps> = ({
     if (editingOperation) {
       setDateRando(parseToInputDate(editingOperation.dateRando));
       setPoints(typeof editingOperation.points === 'number' ? editingOperation.points : '');
-      setDescription(editingOperation.description || '');
+      const initialMotif = editingOperation.motif || DEFAULT_MOTIF;
+      setMotif(initialMotif);
+      setKm(editingOperation.km !== undefined ? editingOperation.km : '');
       setValidationError(null);
     } else {
       setDateRando('');
       setPoints(DEFAULT_POINTS);
-      setDescription(DEFAULT_DESCRIPTION);
+      setMotif(DEFAULT_MOTIF);
+      setKm('');
       setValidationError(null);
     }
   }, [editingOperation]);
@@ -109,7 +117,8 @@ export const OperationForm: React.FC<OperationFormProps> = ({
       prevMemberIdRef.current = member.id;
       setDateRando('');
       setPoints(DEFAULT_POINTS);
-      setDescription(DEFAULT_DESCRIPTION);
+      setMotif(DEFAULT_MOTIF);
+      setKm('');
       setValidationError(null);
       if (editingOperation && onCancelEdit) {
         onCancelEdit();
@@ -121,7 +130,8 @@ export const OperationForm: React.FC<OperationFormProps> = ({
   const handleResetForm = () => {
     setDateRando('');
     setPoints(DEFAULT_POINTS);
-    setDescription(DEFAULT_DESCRIPTION);
+    setMotif(DEFAULT_MOTIF);
+    setKm('');
     setValidationError(null);
     if (editingOperation && onCancelEdit) {
       onCancelEdit();
@@ -130,7 +140,7 @@ export const OperationForm: React.FC<OperationFormProps> = ({
 
   const handleMotifSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
-    setDescription(val);
+    setMotif(val);
     if (!val) {
       setPoints('');
       return;
@@ -181,16 +191,14 @@ export const OperationForm: React.FC<OperationFormProps> = ({
       return;
     }
 
-    const safeDesc = (description || '').trim();
-    if (!safeDesc) {
-      setValidationError('Veuillez sélectionner une description / un motif.');
-      return;
-    }
+    const safeMotif = (motif || '').trim() || DEFAULT_MOTIF;
 
     onSubmit({
       dateRando,
       points: numPoints,
-      description: safeDesc,
+      motif: safeMotif,
+      km: km !== '' ? km : '',
+      description: safeMotif,
     });
   };
 
@@ -280,10 +288,10 @@ export const OperationForm: React.FC<OperationFormProps> = ({
         </div>
       )}
 
-      {/* The 3 fields row */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
-        {/* Field 1: Date Rando */}
-        <div className="md:col-span-4 space-y-2">
+      {/* The 4 fields row */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+        {/* Field 1: Date Rando (Col A) */}
+        <div className="md:col-span-3 space-y-2">
           <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <CalendarIcon className="w-4 h-4 text-emerald-700" />
@@ -298,15 +306,15 @@ export const OperationForm: React.FC<OperationFormProps> = ({
             required
             value={dateRando}
             onChange={(e) => setDateRando(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-colors shadow-xs"
+            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-colors shadow-xs"
           />
 
           {/* Quick Date Pills */}
-          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+          <div className="flex items-center gap-1 flex-wrap pt-0.5">
             <button
               type="button"
               onClick={() => setQuickDate(0)}
-              className={`text-[11px] px-2 py-0.5 rounded-md font-medium transition-colors ${
+              className={`text-[10px] px-2 py-0.5 rounded-md font-medium transition-colors ${
                 dateRando === getTodayStr()
                   ? 'bg-emerald-700 text-white'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -317,24 +325,24 @@ export const OperationForm: React.FC<OperationFormProps> = ({
             <button
               type="button"
               onClick={() => setQuickDate(1)}
-              className="text-[11px] px-2 py-0.5 rounded-md font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+              className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
             >
               Hier
             </button>
             <button
               type="button"
               onClick={() => setQuickDate(3)}
-              className="text-[11px] px-2 py-0.5 rounded-md font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+              className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
             >
               Dimanche
             </button>
           </div>
         </div>
 
-        {/* Field 2: Points */}
-        <div className="md:col-span-3 space-y-2">
+        {/* Field 2: Points (Col C) */}
+        <div className="md:col-span-2 space-y-2">
           <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1">
               {typeof points === 'number' && points < 0 ? (
                 <MinusCircle className="w-4 h-4 text-red-600" />
               ) : (
@@ -346,17 +354,17 @@ export const OperationForm: React.FC<OperationFormProps> = ({
             <button
               type="button"
               onClick={toggleSign}
-              className="text-[11px] text-emerald-700 hover:underline font-semibold"
+              className="text-[10px] text-emerald-700 hover:underline font-semibold"
             >
-              Inverser +/-
+              +/-
             </button>
           </label>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={toggleSign}
-              className={`px-2.5 py-2.5 rounded-xl font-bold text-sm border transition-colors ${
+              className={`px-2 py-2.5 rounded-xl font-bold text-xs border transition-colors ${
                 typeof points === 'number' && points < 0
                   ? 'bg-red-100 text-red-800 border-red-300'
                   : 'bg-emerald-100 text-emerald-800 border-emerald-300'
@@ -375,8 +383,8 @@ export const OperationForm: React.FC<OperationFormProps> = ({
                 const val = e.target.value;
                 setPoints(val === '' ? '' : Number(val));
               }}
-              placeholder="Ex: 5"
-              className={`w-full px-3 py-2.5 bg-gray-50 border rounded-xl text-base font-black text-center focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-xs ${
+              placeholder="1"
+              className={`w-full px-2 py-2.5 bg-gray-50 border rounded-xl text-sm font-black text-center focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-xs ${
                 typeof points === 'number' && points < 0
                   ? 'text-red-700 border-red-300 focus:border-red-500'
                   : 'text-emerald-800 border-gray-300 focus:border-emerald-600'
@@ -386,12 +394,12 @@ export const OperationForm: React.FC<OperationFormProps> = ({
 
           {/* Quick Point chips */}
           <div className="flex items-center gap-1 flex-wrap pt-0.5">
-            {[1, 2, 3, 4, 5].map((val) => (
+            {[1, 2, 3].map((val) => (
               <button
                 key={val}
                 type="button"
                 onClick={() => handleQuickPoints(val)}
-                className={`text-[11px] px-1.5 py-0.5 rounded font-semibold transition-colors ${
+                className={`text-[10px] px-1.5 py-0.5 rounded font-semibold transition-colors ${
                   points === val
                     ? 'bg-emerald-700 text-white'
                     : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
@@ -403,7 +411,7 @@ export const OperationForm: React.FC<OperationFormProps> = ({
             <button
               type="button"
               onClick={() => handleQuickPoints(-2)}
-              className={`text-[11px] px-1.5 py-0.5 rounded font-semibold transition-colors ${
+              className={`text-[10px] px-1.5 py-0.5 rounded font-semibold transition-colors ${
                 points === -2
                   ? 'bg-red-700 text-white'
                   : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
@@ -414,45 +422,45 @@ export const OperationForm: React.FC<OperationFormProps> = ({
           </div>
         </div>
 
-        {/* Field 3: Descriptions with Add and Modify motif buttons */}
-        <div className="md:col-span-5 space-y-2">
+        {/* Field 3: Motif (Col D) with Add and Modify motif buttons */}
+        <div className="md:col-span-4 space-y-2">
           <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Tag className="w-4 h-4 text-amber-600" />
-              <span>Descriptions</span>
+              <span>Motif</span>
               <span className="text-red-500 font-bold">*</span>
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => onOpenEditMotifModal(description || '')}
-                className="text-amber-700 hover:underline font-medium text-[11px] flex items-center gap-0.5"
+                onClick={() => onOpenEditMotifModal(motif || '')}
+                className="text-amber-700 hover:underline font-medium text-[10px] flex items-center gap-0.5"
               >
-                <Pencil className="w-3 h-3" />
+                <Pencil className="w-2.5 h-2.5" />
                 <span>Modifier</span>
               </button>
               <span className="text-gray-300">|</span>
               <button
                 type="button"
                 onClick={onOpenNewMotifModal}
-                className="text-emerald-700 hover:underline font-medium text-[11px] flex items-center gap-0.5"
+                className="text-emerald-700 hover:underline font-medium text-[10px] flex items-center gap-0.5"
               >
-                <Plus className="w-3 h-3" />
+                <Plus className="w-2.5 h-2.5" />
                 <span>Nouveau</span>
               </button>
             </div>
           </label>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <div className="relative flex-1">
               <select
-                value={description || ''}
+                value={motif || ''}
                 onChange={handleMotifSelect}
-                className="w-full appearance-none px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 pr-9 transition-colors shadow-xs"
+                className="w-full appearance-none px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-medium text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 pr-7 transition-colors shadow-xs"
               >
-                <option value="">Sélectionner un motif de la table Keys...</option>
-                {description && !motifs.some((m) => m.label === description) && (
-                  <option value={description}>{description}</option>
+                <option value="">Sélectionner un motif...</option>
+                {motif && !motifs.some((m) => m.label === motif) && (
+                  <option value={motif}>{motif}</option>
                 )}
                 {motifs.map((m, idx) => (
                   <option key={`${m.label}-${idx}`} value={m.label}>
@@ -460,29 +468,47 @@ export const OperationForm: React.FC<OperationFormProps> = ({
                   </option>
                 ))}
               </select>
-              <ChevronDown className="w-4 h-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-3.5 h-3.5 text-gray-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
-            {/* Modifier motif existant */}
             <button
               type="button"
-              onClick={() => onOpenEditMotifModal(description || '')}
+              onClick={() => onOpenEditMotifModal(motif || '')}
               title="Modifier le motif sélectionné"
-              className="p-2.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold shadow-xs transition-all duration-150 shrink-0 border border-amber-300"
+              className="p-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold shadow-xs transition-all duration-150 shrink-0 border border-amber-300"
             >
-              <Pencil className="w-4 h-4" />
+              <Pencil className="w-3.5 h-3.5" />
             </button>
 
-            {/* Ajouter nouveau motif */}
             <button
               type="button"
               onClick={onOpenNewMotifModal}
-              title="Ajouter un nouveau motif dans la table Keys"
-              className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs transition-all duration-150 shrink-0"
+              title="Ajouter un nouveau motif"
+              className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs transition-all duration-150 shrink-0"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
             </button>
           </div>
+        </div>
+
+        {/* Field 4: Km (Col E) */}
+        <div className="md:col-span-3 space-y-2">
+          <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Tag className="w-4 h-4 text-blue-600" />
+              <span>Km</span>
+            </span>
+            <span className="text-[10px] text-gray-400 font-normal">Col E Google Sheet</span>
+          </label>
+
+          <input
+            type="text"
+            inputMode="decimal"
+            value={km}
+            onChange={(e) => setKm(e.target.value)}
+            placeholder="ex: 45"
+            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-colors shadow-xs"
+          />
         </div>
       </div>
 
@@ -546,7 +572,6 @@ export const OperationForm: React.FC<OperationFormProps> = ({
               isLoading ||
               !user ||
               (userPermission && !userPermission.canWrite) ||
-              !(description || '').trim() ||
               points === '' ||
               points === 0 ||
               isNaN(Number(points)) ||

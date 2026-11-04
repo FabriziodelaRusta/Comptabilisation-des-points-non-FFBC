@@ -21,7 +21,9 @@ interface ConfirmationModalProps {
   memberName: string;
   dateRando: string;
   points: number;
-  description: string;
+  motif?: string;
+  km?: string | number;
+  description?: string;
   dateOperation: string;
   spreadsheetName?: string;
   isLoading: boolean;
@@ -35,6 +37,8 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   memberName,
   dateRando,
   points,
+  motif,
+  km,
   description,
   dateOperation,
   spreadsheetName,
@@ -129,13 +133,26 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
               </span>
             </div>
 
-            {/* Description */}
+            {/* Motif (Col D) */}
+            {motif && (
+              <div className="flex items-start justify-between py-1 border-b border-gray-200/60 text-sm">
+                <span className="text-gray-500 flex items-center gap-2 shrink-0">
+                  <Tag className="w-4 h-4 text-emerald-600" />
+                  Motif (Col D)
+                </span>
+                <span className="font-semibold text-gray-800 text-right ml-4">{motif}</span>
+              </div>
+            )}
+
+            {/* Km (Col E) */}
             <div className="flex items-start justify-between py-1 border-b border-gray-200/60 text-sm">
               <span className="text-gray-500 flex items-center gap-2 shrink-0">
-                <Tag className="w-4 h-4 text-amber-600" />
-                Description
+                <Tag className="w-4 h-4 text-blue-600" />
+                Km (Col E)
               </span>
-              <span className="font-semibold text-gray-800 text-right ml-4">{description}</span>
+              <span className="font-semibold text-gray-800 text-right ml-4">
+                {km !== undefined && km !== '' ? `${km} km` : description || '—'}
+              </span>
             </div>
 
             {/* Date rando */}

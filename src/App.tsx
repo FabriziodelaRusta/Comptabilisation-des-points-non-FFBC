@@ -42,10 +42,14 @@ import {
   postToAppsScript,
   parseOperationDateTime,
   checkUserSheetPermission,
+  batchInsertOperationsViaAppsScript,
 } from './lib/googleSheets';
 import { HeaderBanner } from './components/HeaderBanner';
 import { MemberSelector, ALL_MEMBERS_OPTION } from './components/MemberSelector';
 import { OperationForm } from './components/OperationForm';
+import { BatchOperationForm } from './components/BatchOperationForm';
+import { PointsTableTab } from './components/PointsTableTab';
+import { BatchConfirmationModal, BatchItem } from './components/BatchConfirmationModal';
 import { NewMemberModal } from './components/NewMemberModal';
 import { NewMotifModal } from './components/NewMotifModal';
 import { EditMotifModal } from './components/EditMotifModal';
@@ -55,10 +59,10 @@ import { SpreadsheetSettingsModal } from './components/SpreadsheetSettingsModal'
 import { Footer } from './components/Footer';
 
 const DEFAULT_APPS_SCRIPT_URL =
-  'https://script.google.com/macros/s/AKfycbz3t7ByQbAA6A5bdZoDRkceWQG-mqqWV23UqckdjiyPngOcwfy9TlhBx07qUU9Ci2EiGg/exec';
+  'https://script.google.com/macros/s/AKfycbzGj_cRZYKrZ0oDqKVmegZpMoYdLWJhHHeMRTHJR4waX6cvKRjyT96dmQaTYZfPKgYBwA/exec';
 
 export default function App() {
-  // Authentication state
+  / Authentication state
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isGoogleConnected, setIsGoogleConnected] = useState<boolean>(false);
   const [userPermission, setUserPermission] = useState<UserPermission | null>(null);
@@ -93,6 +97,7 @@ export default function App() {
 
   // App data state
   const [members, setMembers] = useState<Member[]>([]);
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [motifs, setMotifs] = useState<MotifKey[]>([]);
   const [operations, setOperations] = useState<OperationRecord[]>([]);
 
@@ -136,6 +141,10 @@ export default function App() {
   const [currentMotifToEdit, setCurrentMotifToEdit] = useState<MotifKey | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
 
+  // 3 Tabs : 1) Tableau des points (premier onglet), 2) Saisie unique, 3) Saisie multiple
+  const [activeTab, setActiveTab] = useState<'points-table' | 'single' | 'batch'>('points-table');
+  const [batchConfirmationItems, setBatchConfirmationItems] = useState<BatchItem[] | null>(null);
+
   // Confirmation Modal state for mutating operations
   const [confirmationData, setConfirmationData] = useState<{
     actionType: 'insert' | 'update' | 'delete';
@@ -145,7 +154,9 @@ export default function App() {
       dateRando: string;
       membre: string;
       points: number;
-      description: string;
+      motif?: string;
+      km?: string | number;
+      description?: string;
       mail: string;
       dateOperation: string;
     };
@@ -246,15 +257,36 @@ export default function App() {
       try {
         setIsLoadingMembers(true);
         const membersRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getMembers');
-        if (membersRes?.success && Array.isArray(membersRes.members)) {
-          setMembers(
-            membersRes.members.map((m: any, i: number) => ({
-              id: `mem-as-${i}`,
-              nom: m.nom,
-              matricule: m.matricule,
-              afficherMajManuelle: true,
-            }))
-          );
+        if (membersRes?.success) {
+          if (Array.isArray(membersRes.members)) {
+            setMembers(
+              membersRes.members.map((m: any, i: number) => ({
+                id: `mem-as-${i}`,
+                nom: m.nom,
+                matricule: m.matricule,
+                afficherMajManuelle: true,
+              }))
+            );
+          }
+          if (Array.isArray(membersRes.allMembers)) {
+            setAllMembers(
+              membersRes.allMembers.map((m: any, i: number) => ({
+                id: `mem-all-${i}`,
+                nom: m.nom,
+                matricule: m.matricule,
+                afficherMajManuelle: Boolean(m.afficherMajManuelle),
+              }))
+            );
+          } else if (Array.isArray(membersRes.members)) {
+            setAllMembers(
+              membersRes.members.map((m: any, i: number) => ({
+                id: `mem-all-${i}`,
+                nom: m.nom,
+                matricule: m.matricule,
+                afficherMajManuelle: true,
+              }))
+            );
+          }
         }
 
         const keysRes = await fetchFromAppsScript(sheetConfig.appsScriptUrl, 'getKeys');
@@ -269,6 +301,9 @@ export default function App() {
               .map((op: any, i: number) => {
                 const isChecked = Boolean(
                   op.isChecked ||
+                  op.colF === true ||
+                  String(op.colF).toUpperCase() === 'TRUE' ||
+                  String(op.colF).toUpperCase() === 'VRAI' ||
                   op.colE === true ||
                   String(op.colE).toUpperCase() === 'TRUE' ||
                   String(op.colE).toUpperCase() === 'VRAI' ||
@@ -281,8 +316,9 @@ export default function App() {
                   dateRando: String(op.dateRando || ''),
                   membre: String(op.membre || ''),
                   points: Number(op.points) || 0,
+                  motif: String(op.motif || ''),
                   description: String(op.description || ''),
-                  colE: isChecked,
+                  colF: isChecked,
                   isChecked: isChecked,
                   source: String(op.source || 'WebApp RPA'),
                   mail: String(op.mail || ''),
@@ -499,7 +535,9 @@ export default function App() {
   const handleFormSubmit = (data: {
     dateRando: string;
     points: number;
-    description: string;
+    motif: string;
+    km: string | number;
+    description?: string;
   }) => {
     if (!currentUser || !currentUser.email) {
       showToast('Veuillez vous connecter avec votre compte Google pour enregistrer des points.', 'error');
@@ -532,7 +570,9 @@ export default function App() {
           dateRando: formatBelgianDate(data.dateRando),
           membre: selectedMember.nom,
           points: data.points,
-          description: data.description,
+          motif: data.motif || '',
+          km: data.km !== undefined ? data.km : '',
+          description: data.description || data.motif || '',
           mail: verifiedUserMail,
           dateOperation: editingOperation.dateOperation || currentTimestamp,
         },
@@ -545,7 +585,9 @@ export default function App() {
           dateRando: formatBelgianDate(data.dateRando),
           membre: selectedMember.nom,
           points: data.points,
-          description: data.description,
+          motif: data.motif || '',
+          km: data.km !== undefined ? data.km : '',
+          description: data.description || data.motif || '',
           mail: verifiedUserMail,
           dateOperation: currentTimestamp,
         },
@@ -553,10 +595,95 @@ export default function App() {
     }
   };
 
+  // 1b. Batch Submit from BatchOperationForm
+  const handleBatchSubmit = (rows: BatchItem[]) => {
+    if (!currentUser || !currentUser.email) {
+      showToast('Veuillez vous connecter avec votre compte Google pour enregistrer des points.', 'error');
+      return;
+    }
+
+    if (userPermission && !userPermission.canWrite) {
+      showToast(
+        userPermission.reason || "Votre compte Google n'est pas autorisé en écriture sur le classeur Points RPA.",
+        'error'
+      );
+      return;
+    }
+
+    if (!rows || rows.length === 0) {
+      showToast('Veuillez saisir au moins une ligne d’opération.', 'error');
+      return;
+    }
+
+    setBatchConfirmationItems(rows);
+  };
+
+  // 1c. Execute Confirmed Batch Insert
+  const handleExecuteConfirmedBatch = async () => {
+    if (!batchConfirmationItems || batchConfirmationItems.length === 0) return;
+    if (!currentUser || !currentUser.email) {
+      showToast('Compte Google non connecté.', 'error');
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const currentTimestamp = formatBelgianDateTime(new Date());
+      const verifiedUserMail = currentUser.email;
+
+      const formattedOps = batchConfirmationItems.map((item) => ({
+        dateRando: formatBelgianDate(item.dateRando),
+        membre: item.membre,
+        points: Number(item.points) || 0,
+        motif: item.motif || '',
+        km: item.km !== undefined ? item.km : '',
+        description: item.description || item.motif || '',
+        mail: verifiedUserMail,
+        dateOperation: currentTimestamp,
+      }));
+
+      if (sheetConfig.appsScriptUrl) {
+        const res = await batchInsertOperationsViaAppsScript(sheetConfig.appsScriptUrl, formattedOps);
+        if (res?.success === false) {
+          throw new Error('Refusé par Google Sheets');
+        }
+      }
+
+      // Add them locally to operations state in reverse to maintain chronological ordering
+      const newOpRecords: OperationRecord[] = formattedOps.map((op, idx) => ({
+        id: `op-batch-${Date.now()}-${idx}`,
+        dateRando: op.dateRando,
+        membre: op.membre,
+        points: op.points,
+        motif: op.motif,
+        km: op.km,
+        description: op.description,
+        colF: false,
+        isChecked: false,
+        source: 'WebApp RPA',
+        mail: op.mail,
+        dateOperation: op.dateOperation,
+        syncedToGoogleSheets: true,
+      }));
+
+      setOperations((prev) => [...newOpRecords, ...prev]);
+      showToast(
+        `${formattedOps.length} opération${formattedOps.length > 1 ? 's' : ''} enregistrée${formattedOps.length > 1 ? 's' : ''} avec succès dans Points RPA !`,
+        'success'
+      );
+      setBatchConfirmationItems(null);
+    } catch (err: any) {
+      console.error('Erreur insertion groupée:', err);
+      showToast(err?.message || "Erreur lors de l'enregistrement groupé.", 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // 2. Trigger edit from list row (Pencil button)
   const handleEditOperation = (op: OperationRecord) => {
     if (op.isChecked) {
-      showToast('Cette opération est validée dans Google Sheets (case cochée en colonne E). Modification verrouillée.', 'error');
+      showToast('Cette opération est validée dans Google Sheets (case cochée). Modification verrouillée.', 'error');
       return;
     }
     if (!currentUser) {
@@ -568,6 +695,7 @@ export default function App() {
       return;
     }
 
+    setActiveTab('single');
     setEditingOperation(op);
     const found = membersWithPoints.find((m) => m.nom.toLowerCase() === op.membre.toLowerCase());
     if (found) {
@@ -585,7 +713,7 @@ export default function App() {
   // 3. Trigger delete from list row (Trash button)
   const handleDeleteOperation = (op: OperationRecord) => {
     if (op.isChecked) {
-      showToast('Cette opération est validée dans Google Sheets (case cochée en colonne E). Suppression verrouillée.', 'error');
+      showToast('Cette opération est validée dans Google Sheets (case cochée). Suppression verrouillée.', 'error');
       return;
     }
     if (!currentUser) {
@@ -605,7 +733,9 @@ export default function App() {
         dateRando: op.dateRando,
         membre: op.membre,
         points: op.points,
-        description: op.description,
+        motif: op.motif || '',
+        km: op.km !== undefined ? op.km : '',
+        description: op.description || op.motif || '',
         mail: currentUser.email || op.mail,
         dateOperation: op.dateOperation,
       },
@@ -625,7 +755,7 @@ export default function App() {
           (item) => item.id === op.id || (op.rowNumber && item.rowNumber === op.rowNumber)
         );
         if (existing?.isChecked) {
-          showToast('Opération validée dans Google Sheets (case cochée en colonne E) : action verrouillée.', 'error');
+          showToast('Opération validée dans Google Sheets (case cochée) : action verrouillée.', 'error');
           setConfirmationData(null);
           return;
         }
@@ -640,7 +770,9 @@ export default function App() {
             dateRando: op.dateRando,
             membre: op.membre,
             points: op.points,
-            description: op.description,
+            motif: op.motif || '',
+            km: op.km !== undefined ? op.km : '',
+            description: op.description || '',
             mail: op.mail,
             dateOperation: op.dateOperation,
           });
@@ -660,8 +792,10 @@ export default function App() {
           dateRando: op.dateRando,
           membre: op.membre,
           points: op.points,
+          motif: op.motif || '',
+          km: op.km,
           description: op.description,
-          colE: false,
+          colF: false,
           isChecked: false,
           source: 'WebApp RPA',
           mail: op.mail,
@@ -684,7 +818,9 @@ export default function App() {
             dateRando: op.dateRando,
             membre: op.membre,
             points: op.points,
-            description: op.description,
+            motif: op.motif || '',
+            km: op.km !== undefined ? op.km : '',
+            description: op.description || '',
             mail: op.mail,
             dateOperation: op.dateOperation,
           });
@@ -701,6 +837,8 @@ export default function App() {
                   ...item,
                   dateRando: op.dateRando,
                   points: op.points,
+                  motif: op.motif || '',
+                  km: op.km,
                   description: op.description,
                   mail: op.mail,
                   syncedToGoogleSheets: true,
@@ -789,87 +927,187 @@ export default function App() {
 
       {/* Main Content Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex-1 w-full space-y-6 sm:space-y-8">
-        {/* Section: Saisie Workflow */}
-        <section className="bg-white rounded-3xl border border-gray-200/90 shadow-sm p-6 sm:p-8 space-y-6">
-          <div className="border-b border-gray-100 pb-4">
-            {isAllMembersSelected && (
-              <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 inline-block mb-1">
-                Consultation Globale
-              </span>
-            )}
-            <h2 className="text-lg sm:text-xl font-extrabold text-gray-900">
-              {isAllMembersSelected
-                ? 'Historique Global des Points Non-FFBC'
-                : "Saisie d'une Opération de Points Non-FFBC"}
-            </h2>
+        {/* Navigation des 3 Onglets Principaux */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 sm:p-3 rounded-2xl border border-gray-200/90 shadow-sm">
+          <div className="flex items-center gap-2 pl-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse hidden sm:inline-block"></span>
+            <span className="text-xs font-black uppercase tracking-wider text-gray-500">
+              Module :
+            </span>
+            <span className="text-xs font-bold text-gray-900">
+              {activeTab === 'points-table' && 'Tableau récapitulatif des points & Export PDF'}
+              {activeTab === 'single' && 'Saisie individuelle de points'}
+              {activeTab === 'batch' && 'Saisie groupée pour plusieurs membres'}
+            </span>
           </div>
 
-          {/* Member Selector */}
-          <div className="space-y-3">
-            <MemberSelector
-              members={membersWithPoints}
-              selectedMember={currentSelectedMemberWithPoints}
-              onSelectMember={(mem) => {
-                setSelectedMember(mem);
-                setEditingOperation(null);
-              }}
-              onOpenNewMemberModal={(initialName) => {
-                setNewMemberInitialName(initialName || '');
-                setIsNewMemberModalOpen(true);
-              }}
-              isLoading={isLoadingMembers}
+          {/* 3 Tabs Pill Buttons with Hover and Click Animations */}
+          <div className="inline-flex items-center p-1 bg-slate-100 rounded-xl border border-gray-200 shrink-0 gap-1 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setActiveTab('points-table')}
+              className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all transform duration-150 cursor-pointer hover:scale-[1.02] active:scale-[0.98] select-none ${
+                activeTab === 'points-table'
+                  ? 'bg-emerald-800 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/80'
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-300" />
+              <span>Tableau des points</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('single')}
+              className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all transform duration-150 cursor-pointer hover:scale-[1.02] active:scale-[0.98] select-none ${
+                activeTab === 'single'
+                  ? 'bg-emerald-800 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/80'
+              }`}
+            >
+              <User className="w-4 h-4 text-emerald-300" />
+              <span>Saisie unique</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('batch')}
+              className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all transform duration-150 cursor-pointer hover:scale-[1.02] active:scale-[0.98] select-none ${
+                activeTab === 'batch'
+                  ? 'bg-emerald-800 text-white shadow-md'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-white/80'
+              }`}
+            >
+              <Users className="w-4 h-4 text-emerald-300" />
+              <span>Saisie multiple</span>
+            </button>
+          </div>
+        </div>
+
+        {/* TAB 1: Tableau des points (premier onglet avec liste des membres & export PDF) */}
+        {activeTab === 'points-table' && (
+          <div className="animate-in fade-in duration-200">
+            <PointsTableTab
+              members={allMembers.length > 0 ? allMembers : membersWithPoints}
+              operations={operations}
+              sheetConfig={sheetConfig}
+              onRefreshData={() => loadDataFromGoogleSheets()}
+              isLoading={isLoadingMembers || isSyncing}
             />
           </div>
+        )}
 
-          {/* If 'Tous' is selected: DO NOT display input form, only show overview notice */}
-          {isAllMembersSelected ? (
-            <div className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-950">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-900 flex items-center justify-center font-bold shrink-0">
-                  <Users className="w-5 h-5 text-slate-900" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-sm">Mode consultation : Tous les membres sélectionnés</h4>
-                  <p className="text-xs text-amber-800/90 mt-0.5">
-                    Les champs de saisie sont masqués. Toutes les opérations de la feuille <strong>Opérations</strong> sont listées ci-dessous par ordre antéchronologique. Pour saisir des points, choisissez un membre individuel dans la liste déroulante.
-                  </p>
-                </div>
+        {/* TAB 2: Saisie unique */}
+        {activeTab === 'single' && (
+          <section className="bg-white rounded-3xl border border-gray-200/90 shadow-sm p-6 sm:p-8 space-y-6 animate-in fade-in duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-4">
+              <div>
+                {isAllMembersSelected && (
+                  <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 inline-block mb-1">
+                    Consultation Globale
+                  </span>
+                )}
+                <h2 className="text-lg sm:text-xl font-extrabold text-gray-900">
+                  {isAllMembersSelected
+                    ? 'Historique Global des Points Non-FFBC'
+                    : "Saisie d'une Opération de Points Non-FFBC"}
+                </h2>
               </div>
             </div>
-          ) : currentSelectedMemberWithPoints ? (
-            /* Specific member selected: display the fields underneath */
-            <div className="pt-2 animate-in fade-in duration-200">
-              <OperationForm
-                key={`${currentSelectedMemberWithPoints.nom}-${editingOperation ? editingOperation.id : `create-${formResetKey}`}`}
-                member={currentSelectedMemberWithPoints}
-                motifs={motifs}
-                user={currentUser}
-                userPermission={userPermission}
-                onSignIn={handleSignIn}
-                editingOperation={editingOperation}
-                onCancelEdit={() => setEditingOperation(null)}
-                onOpenNewMotifModal={() => setIsNewMotifModalOpen(true)}
-                onOpenEditMotifModal={handleOpenEditMotif}
-                onSubmit={handleFormSubmit}
-                isLoading={actionLoading}
-              />
-            </div>
-          ) : (
-            <div className="p-8 rounded-2xl bg-gray-50/70 border border-dashed border-gray-300 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center mx-auto font-bold">
-                <User className="w-6 h-6 text-blue-600" />
+
+            <div className="space-y-6">
+              {/* Member Selector */}
+              <div className="space-y-3">
+                <MemberSelector
+                  members={membersWithPoints}
+                  selectedMember={currentSelectedMemberWithPoints}
+                  onSelectMember={(mem) => {
+                    setSelectedMember(mem);
+                    setEditingOperation(null);
+                  }}
+                  onOpenNewMemberModal={(initialName) => {
+                    setNewMemberInitialName(initialName || '');
+                    setIsNewMemberModalOpen(true);
+                  }}
+                  isLoading={isLoadingMembers}
+                />
               </div>
-              <div className="max-w-md mx-auto">
-                <h3 className="text-sm font-bold text-gray-800">
-                  Choisissez un membre RPA ou « Tous » dans la liste ci-dessus
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  Sélectionnez un membre pour lui attribuer des points (date rando, points, description) ou choisissez <strong>« Tous »</strong> pour consulter l'ensemble des opérations du club.
+
+              {/* If 'Tous' is selected: DO NOT display input form, only show overview notice */}
+              {isAllMembersSelected ? (
+                <div className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-950">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-900 flex items-center justify-center font-bold shrink-0">
+                      <Users className="w-5 h-5 text-slate-900" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm">Mode consultation : Tous les membres sélectionnés</h4>
+                      <p className="text-xs text-amber-800/90 mt-0.5">
+                        Les champs de saisie sont masqués. Toutes les opérations de la feuille <strong>Opérations</strong> sont listées ci-dessous par ordre antéchronologique. Pour saisir des points, choisissez un membre individuel dans la liste déroulante.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : currentSelectedMemberWithPoints ? (
+                /* Specific member selected: display the fields underneath */
+                <div className="pt-2 animate-in fade-in duration-200">
+                  <OperationForm
+                    key={`${currentSelectedMemberWithPoints.nom}-${editingOperation ? editingOperation.id : `create-${formResetKey}`}`}
+                    member={currentSelectedMemberWithPoints}
+                    motifs={motifs}
+                    user={currentUser}
+                    userPermission={userPermission}
+                    onSignIn={handleSignIn}
+                    editingOperation={editingOperation}
+                    onCancelEdit={() => setEditingOperation(null)}
+                    onOpenNewMotifModal={() => setIsNewMotifModalOpen(true)}
+                    onOpenEditMotifModal={handleOpenEditMotif}
+                    onSubmit={handleFormSubmit}
+                    isLoading={actionLoading}
+                  />
+                </div>
+              ) : (
+                <div className="p-8 rounded-2xl bg-gray-50/70 border border-dashed border-gray-300 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center mx-auto font-bold">
+                    <User className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div className="max-w-md mx-auto">
+                    <h3 className="text-sm font-bold text-gray-800">
+                      Choisissez un membre RPA ou « Tous » dans la liste ci-dessus
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Sélectionnez un membre pour lui attribuer des points (date rando, points, motif, description) ou choisissez <strong>« Tous »</strong> pour consulter l'ensemble des opérations du club.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* TAB 3: Saisie multiple pour une série de membres */}
+        {activeTab === 'batch' && (
+          <section className="bg-white rounded-3xl border border-gray-200/90 shadow-sm p-6 sm:p-8 space-y-6 animate-in fade-in duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-4">
+              <div>
+                <h2 className="text-lg sm:text-xl font-extrabold text-gray-900">
+                  Saisie Multiple pour une Série de Membres
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Remplissez une ligne par membre (date, membre, points, motif, description) puis validez l'ensemble en un seul clic.
                 </p>
               </div>
             </div>
-          )}
-        </section>
+
+            <BatchOperationForm
+              members={membersWithPoints.filter((m) => m.nom !== 'Tous')}
+              motifs={motifs}
+              user={currentUser}
+              userPermission={userPermission}
+              onSignIn={handleSignIn}
+              onSubmitBatch={handleBatchSubmit}
+              isLoading={actionLoading}
+            />
+          </section>
+        )}
 
         {/* Section: Filtered Operations List with Pencil & Trash */}
         <section>
@@ -923,12 +1161,23 @@ export default function App() {
         memberName={confirmationData?.operation.membre || ''}
         dateRando={confirmationData?.operation.dateRando || ''}
         points={confirmationData?.operation.points || 0}
+        motif={confirmationData?.operation.motif || ''}
+        km={confirmationData?.operation.km}
         description={confirmationData?.operation.description || ''}
         dateOperation={confirmationData?.operation.dateOperation || ''}
         spreadsheetName={sheetConfig.spreadsheetName}
         isLoading={actionLoading}
         onConfirm={handleExecuteConfirmedAction}
         onCancel={() => setConfirmationData(null)}
+      />
+
+      <BatchConfirmationModal
+        isOpen={Boolean(batchConfirmationItems && batchConfirmationItems.length > 0)}
+        items={batchConfirmationItems || []}
+        spreadsheetName={sheetConfig.spreadsheetName}
+        isLoading={actionLoading}
+        onConfirm={handleExecuteConfirmedBatch}
+        onCancel={() => setBatchConfirmationItems(null)}
       />
 
       <SpreadsheetSettingsModal
