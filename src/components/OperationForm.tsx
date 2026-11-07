@@ -273,7 +273,7 @@ export const OperationForm: React.FC<OperationFormProps> = ({
               )}
               {member.pointsActuels !== undefined && (
                 <span className="text-xs bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg shadow-2xs">
-                  Solde : {member.pointsActuels} pts
+                  Points {new Date().getFullYear()} : {member.pointsActuels > 0 ? `+${member.pointsActuels}` : member.pointsActuels} pts
                 </span>
               )}
             </>

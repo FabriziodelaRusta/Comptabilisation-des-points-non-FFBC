@@ -15,6 +15,7 @@ import {
   Loader2,
   Sparkles,
   Info,
+  Check,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -25,6 +26,8 @@ interface PointsTableTabProps {
   members: Member[];
   operations: OperationRecord[];
   sheetConfig: SheetConfig;
+  selectedMemberName?: string | null;
+  onSelectMember?: (memberName: string | null) => void;
   onRefreshData?: () => void;
   isLoading?: boolean;
 }
@@ -42,9 +45,12 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
   members,
   operations,
   sheetConfig,
+  selectedMemberName,
+  onSelectMember,
   onRefreshData,
   isLoading,
 }) => {
+  const currentYear = new Date().getFullYear();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<'points' | 'nom'>('points');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -255,7 +261,7 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
       });
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(30, 64, 175);
-      doc.text(`Total points : ${totalFilteredPoints} pts`, pageWidth - margin, 26, {
+      doc.text(`Total points ${currentYear} : ${totalFilteredPoints} pts`, pageWidth - margin, 26, {
         align: 'right',
       });
 
@@ -272,14 +278,14 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
 
       // Total row in footer
       const footRow = [
-        `TOTAL DES POINTS (${filteredAndSortedMembers.length} membres)`,
+        `TOTAL DES POINTS ${currentYear} (${filteredAndSortedMembers.length} membres)`,
         `${totalFilteredPoints} pts`,
       ];
 
       autoTable(doc, {
         startY: 34,
         margin: { left: margin, right: margin },
-        head: [['Membre', 'Points']],
+        head: [['Membre', `Points ${currentYear}`]],
         body: tableData,
         foot: [footRow],
         theme: 'striped',
@@ -359,7 +365,7 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
             <div className="flex items-center bg-slate-50 px-3.5 py-1.5 rounded-xl border border-slate-200/80 text-xs shadow-2xs">
               <div>
                 <span className="text-slate-400 block text-[10px] font-semibold uppercase">
-                  Total des points
+                  Points {currentYear}
                 </span>
                 <span className="font-mono font-black text-blue-700 text-sm">
                   {totalPointsAll > 0 ? `+${totalPointsAll}` : totalPointsAll} pts
@@ -425,7 +431,7 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <span>Points</span>
+              <span>Points {currentYear}</span>
               {sortField === 'points' &&
                 (sortOrder === 'desc' ? (
                   <ArrowDown className="w-3 h-3" />
@@ -452,6 +458,31 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Selected Member Notification Banner */}
+        {selectedMemberName && (
+          <div className="mt-3 p-3 rounded-2xl bg-blue-50/90 border border-blue-200/90 flex flex-wrap items-center justify-between gap-2.5 text-xs text-blue-950 animate-in fade-in duration-150">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+              <span className="font-semibold text-slate-600">Membre sélectionné :</span>
+              <span className="font-black bg-blue-600 text-white px-2.5 py-0.5 rounded-lg shadow-2xs">
+                {selectedMemberName}
+              </span>
+              <span className="text-slate-500 text-[11px]">
+                (Le détail complet de ses opérations est affiché dans la liste ci-dessous)
+              </span>
+            </div>
+            {onSelectMember && (
+              <button
+                type="button"
+                onClick={() => onSelectMember(null)}
+                className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-white px-2.5 py-1 rounded-lg border border-blue-300 hover:border-blue-400 transition-colors shadow-2xs cursor-pointer"
+              >
+                Afficher toutes les opérations
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Table Card */}
@@ -479,7 +510,7 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                   className="px-5 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors w-44"
                 >
                   <div className="flex items-center justify-end gap-1.5">
-                    <span>Points</span>
+                    <span>Points {currentYear}</span>
                     {sortField === 'points' &&
                       (sortOrder === 'desc' ? (
                         <ArrowDown className="w-3 h-3 text-blue-600" />
@@ -505,16 +536,44 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                 </tr>
               ) : (
                 filteredAndSortedMembers.map((m, idx) => {
+                  const isSelected =
+                    Boolean(selectedMemberName) &&
+                    selectedMemberName?.trim().toLowerCase() === m.nom.trim().toLowerCase();
                   return (
                     <tr
                       key={m.nom}
-                      className={`hover:bg-blue-50/40 transition-colors ${
-                        idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white'
+                      onClick={() => onSelectMember && onSelectMember(isSelected ? null : m.nom)}
+                      title={
+                        onSelectMember
+                          ? isSelected
+                            ? 'Cliquer pour afficher toutes les opérations'
+                            : `Cliquer pour afficher le détail des opérations de ${m.nom} dans la liste ci-dessous`
+                          : undefined
+                      }
+                      className={`transition-colors cursor-pointer select-none ${
+                        isSelected
+                          ? 'bg-blue-100/90 border-l-4 border-l-blue-600 font-medium shadow-2xs'
+                          : idx % 2 === 1
+                          ? 'bg-slate-50/30 hover:bg-blue-50/60'
+                          : 'bg-white hover:bg-blue-50/60'
                       }`}
                     >
                       {/* Nom */}
                       <td className="px-5 py-3.5">
-                        <span className="font-bold text-slate-900 text-sm">{m.nom}</span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-bold text-sm ${
+                              isSelected ? 'text-blue-900' : 'text-slate-900'
+                            }`}
+                          >
+                            {m.nom}
+                          </span>
+                          {isSelected && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2 py-0.5 rounded-md shadow-2xs">
+                              Détail affiché
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Points */}
@@ -522,7 +581,9 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                         <span
                           className={`font-mono font-black text-sm px-2.5 py-0.5 rounded-lg inline-block ${
                             m.totalPoints > 0
-                              ? 'text-blue-700 bg-blue-50 border border-blue-200/60'
+                              ? isSelected
+                                ? 'text-blue-950 bg-blue-200/80 border border-blue-300'
+                                : 'text-blue-700 bg-blue-50 border border-blue-200/60'
                               : m.totalPoints < 0
                               ? 'text-red-700 bg-red-50 border border-red-200/60'
                               : 'text-slate-400 bg-slate-100'
@@ -543,7 +604,7 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                 <tr>
                   <td className="px-5 py-4">
                     <span className="uppercase tracking-wider text-xs font-black text-slate-800">
-                      Total des points
+                      Total des points {currentYear}
                     </span>
                     <span className="text-xs text-slate-500 font-semibold ml-2">
                       ({filteredAndSortedMembers.length} membre

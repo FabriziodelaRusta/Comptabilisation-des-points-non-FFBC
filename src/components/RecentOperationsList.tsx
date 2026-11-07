@@ -49,6 +49,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
   onSelectMemberFilter,
   onLoadDemoData,
 }) => {
+  const currentYear = new Date().getFullYear();
   const [filterText, setFilterText] = useState('');
   const [sortField, setSortField] = useState<SortField>('dateOperation');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -145,7 +146,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
             {isAllSelected ? <Users className="w-4 h-4" /> : <History className="w-4 h-4" />}
           </div>
           <div>
-            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 flex-wrap">
               <span>
                 {isAllSelected
                   ? 'Toutes les opérations'
@@ -154,6 +155,15 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
               <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
                 {sortedOperations.length} opération{sortedOperations.length > 1 ? 's' : ''}
               </span>
+              {!isAllSelected && onSelectMemberFilter && (
+                <button
+                  type="button"
+                  onClick={() => onSelectMemberFilter('Tous')}
+                  className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded-full border border-blue-200 transition-colors cursor-pointer"
+                >
+                  Afficher tous les membres
+                </button>
+              )}
             </h2>
             <p className="text-xs text-gray-500">
               Historique des attributions de points • Cliquez sur les colonnes pour trier
@@ -174,10 +184,10 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
         </div>
       </div>
 
-      {/* Summary Chips - Solde des points */}
+      {/* Summary Chips - Points */}
       <div className="px-5 py-2.5 bg-emerald-50/50 border-b border-emerald-100 flex flex-wrap items-center gap-4 text-xs">
         <div className="text-gray-700">
-          <span className="text-gray-500">Solde des points :</span>{' '}
+          <span className="text-gray-500 font-semibold">Points {currentYear} :</span>{' '}
           <strong className="text-emerald-800 font-extrabold text-sm ml-1">
             {totalPoints > 0 ? `+${totalPoints}` : totalPoints} pts
           </strong>
@@ -223,8 +233,8 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                 </th>
 
                 {/* 3. Points */}
-                <th className="px-3.5 py-3 text-center">
-                  <span>Points</span>
+                <th className="px-3.5 py-3 text-center whitespace-nowrap">
+                  <span>Points {currentYear}</span>
                 </th>
 
                 {/* 4. Motif (Col D) */}

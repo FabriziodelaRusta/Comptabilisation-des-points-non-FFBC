@@ -62,7 +62,8 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
     }
   }, [isOpen]);
 
-  const filteredMembers = members.filter((m) =>
+    const currentYear = new Date().getFullYear();
+    const filteredMembers = members.filter((m) =>
     m.nom.toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
     (m.matricule && m.matricule.toLowerCase().includes(searchQuery.toLowerCase().trim()))
   );
@@ -151,7 +152,7 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
                             {selectedMember.pointsActuels > 0
                               ? `+${selectedMember.pointsActuels}`
                               : selectedMember.pointsActuels}{' '}
-                            pts actuels
+                            pts {currentYear}
                           </span>
                         </span>
                       )}
@@ -314,7 +315,7 @@ export const MemberSelector: React.FC<MemberSelectorProps> = ({
                               : 'text-emerald-700 bg-emerald-100/70'
                           }`}
                         >
-                          {member.pointsActuels > 0 ? `+${member.pointsActuels}` : member.pointsActuels} pts
+                          {member.pointsActuels > 0 ? `+${member.pointsActuels}` : member.pointsActuels} pts {currentYear}
                         </span>
                       )}
                       {isSelected && <Check className="w-4 h-4 text-emerald-700 font-bold" />}

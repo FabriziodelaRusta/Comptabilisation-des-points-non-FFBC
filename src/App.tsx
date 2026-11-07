@@ -1002,6 +1002,33 @@ export default function App() {
               members={allMembers.length > 0 ? allMembers : membersWithPoints}
               operations={operations}
               sheetConfig={sheetConfig}
+              selectedMemberName={
+                selectedMember && selectedMember.nom !== 'Tous' ? selectedMember.nom : null
+              }
+              onSelectMember={(memberName) => {
+                if (!memberName) {
+                  setSelectedMember(ALL_MEMBERS_OPTION);
+                  return;
+                }
+                const found = members.find(
+                  (m) => m.nom.trim().toLowerCase() === memberName.trim().toLowerCase()
+                );
+                if (found) {
+                  setSelectedMember(found);
+                } else {
+                  setSelectedMember({
+                    id: `mem-${memberName}`,
+                    nom: memberName,
+                    afficherMajManuelle: true,
+                  });
+                }
+                setTimeout(() => {
+                  const listEl = document.getElementById('recent-operations-section');
+                  if (listEl) {
+                    listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }
+                }, 50);
+              }}
               onRefreshData={() => loadDataFromGoogleSheets()}
               isLoading={isLoadingMembers || isSyncing}
             />
@@ -1124,7 +1151,7 @@ export default function App() {
         )}
 
         {/* Section: Filtered Operations List with Pencil & Trash */}
-        <section>
+        <section id="recent-operations-section" className="scroll-mt-6">
           <RecentOperationsList
             operations={operations}
             selectedMember={selectedMember}
@@ -1134,10 +1161,15 @@ export default function App() {
             onEditOperation={handleEditOperation}
             onDeleteOperation={handleDeleteOperation}
             onSelectMemberFilter={(nom) => {
+              if (!nom || nom === 'Tous') {
+                setSelectedMember(ALL_MEMBERS_OPTION);
+                return;
+              }
               const found = members.find((m) => m.nom.toLowerCase() === nom.toLowerCase());
               if (found) {
                 setSelectedMember(found);
-                window.scrollTo({ top: 120, behavior: 'smooth' });
+                const el = document.getElementById('recent-operations-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }
             }}
             onLoadDemoData={handleLoadDemoData}
