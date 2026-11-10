@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { OperationRecord, Member } from '../types';
 import { parseOperationDateTime } from '../lib/googleSheets';
+import { areMemberNamesEqual } from '../lib/ffbcLoader';
 
 export function formatOperationDescription(motifOrDesc?: string, dateRando?: string): string {
   const raw = (motifOrDesc || '').trim();
@@ -33,9 +34,12 @@ export function formatOperationDescription(motifOrDesc?: string, dateRando?: str
   return raw;
 }
 
-export function formatOperationSource(rawSource?: string, motifOrDesc?: string): { label: string; isGoogleScript: boolean } {
-  const isPointsAccumules = /points?\s+accumul[eé]s?/i.test(motifOrDesc || '');
+export function formatOperationSource(rawSource?: string, motifOrDesc?: string): { label: string; isGoogleScript: boolean; isFfbc?: boolean } {
   const s = String(rawSource || '').trim().toLowerCase();
+  if (s.includes('ffbc') || s.includes('github')) {
+    return { label: 'FFBC (GitHub)', isGoogleScript: false, isFfbc: true };
+  }
+  const isPointsAccumules = /points?\s+accumul[eé]s?/i.test(motifOrDesc || '');
   const isScript =
     isPointsAccumules ||
     s.includes('google script') ||
@@ -91,15 +95,24 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
     }
   };
 
-  // Helper to parse DD/MM/YYYY into timestamp
+  // Helper to parse DD/MM/YYYY or YYYY/MM/DD into timestamp
   const parseDateOnly = (str: string): number => {
     if (!str) return 0;
-    const parts = str.trim().split('/');
-    if (parts.length === 3) {
-      const [d, m, y] = parts.map(Number);
-      return new Date(y, m - 1, d).getTime();
+    const clean = str.trim();
+    if (clean.includes('/')) {
+      const parts = clean.split('/').map(Number);
+      if (parts.length === 3) {
+        if (parts[0] > 1000) {
+          // YYYY/MM/DD
+          return new Date(parts[0], parts[1] - 1, parts[2]).getTime();
+        } else {
+          // DD/MM/YYYY
+          return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
+        }
+      }
     }
-    return new Date(str).getTime() || 0;
+    const d = new Date(clean);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
   };
 
   // 1. Filter by selected member (unless "Tous" or null)
@@ -107,9 +120,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
 
   const memberFiltered = isAllSelected
     ? operations
-    : operations.filter(
-        (op) => (op.membre || '').trim().toLowerCase() === (selectedMember?.nom || '').trim().toLowerCase()
-      );
+    : operations.filter((op) => areMemberNamesEqual(op.membre, selectedMember?.nom || ''));
 
   // 2. Filter by search input
   const searchFiltered = memberFiltered.filter((op) => {
@@ -159,12 +170,12 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
 
   const renderSortIcon = (field: SortField) => {
     if (sortField !== field) {
-      return <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 ml-1 inline" />;
+      return <ArrowUpDown className="w-3.5 h-3.5 text-white/70 group-hover:text-white ml-1 inline" />;
     }
     return sortDirection === 'asc' ? (
-      <ArrowUp className="w-3.5 h-3.5 text-emerald-700 ml-1 inline" />
+      <ArrowUp className="w-3.5 h-3.5 text-white ml-1 inline" />
     ) : (
-      <ArrowDown className="w-3.5 h-3.5 text-emerald-700 ml-1 inline" />
+      <ArrowDown className="w-3.5 h-3.5 text-white ml-1 inline" />
     );
   };
 
@@ -243,14 +254,14 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
       <div className="overflow-x-auto">
         {sortedOperations.length > 0 ? (
           <table className="w-full text-left text-xs divide-y divide-gray-100">
-            <thead className="bg-gray-50 text-gray-600 font-bold uppercase tracking-wider text-[11px]">
+            <thead className="bg-[#009ee2] text-white font-bold uppercase tracking-wider text-[11px] select-none">
               <tr>
                 {/* 1. Date Rando with sort */}
                 <th
                   onClick={() => handleSort('dateRando')}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                  className="px-3.5 py-3 cursor-pointer hover:bg-[#008cc9] transition-colors select-none group text-center"
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center justify-center gap-1">
                     <span>Date rando</span>
                     {renderSortIcon('dateRando')}
                   </div>
@@ -259,9 +270,9 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                 {/* 2. Nom Membre with sort */}
                 <th
                   onClick={() => handleSort('membre')}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                  className="px-3.5 py-3 cursor-pointer hover:bg-[#008cc9] transition-colors select-none group text-center"
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center justify-center gap-1">
                     <span>Nom membre</span>
                     {renderSortIcon('membre')}
                   </div>
@@ -273,14 +284,14 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                 </th>
 
                 {/* 4. Description */}
-                <th className="px-3 py-3 whitespace-nowrap">
+                <th className="px-3 py-3 whitespace-nowrap text-center">
                   <span>Description</span>
                 </th>
 
                 {/* 5. Km */}
                 <th
                   onClick={() => handleSort('description')}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group text-center"
+                  className="px-3.5 py-3 cursor-pointer hover:bg-[#008cc9] transition-colors select-none group text-center"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span>Km</span>
@@ -289,28 +300,28 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                 </th>
 
                 {/* 6. Source (Col G) */}
-                <th className="px-3.5 py-3 whitespace-nowrap">
+                <th className="px-3.5 py-3 whitespace-nowrap text-center">
                   <span>Source</span>
                 </th>
 
                 {/* 7. Mail Connexion (Col H) */}
-                <th className="px-3.5 py-3">
+                <th className="px-3.5 py-3 text-center">
                   <span>Mail</span>
                 </th>
 
                 {/* 8. Date Opération with sort (Col I) */}
                 <th
                   onClick={() => handleSort('dateOperation')}
-                  className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group"
+                  className="px-3.5 py-3 cursor-pointer hover:bg-[#008cc9] transition-colors select-none group text-center"
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center justify-center gap-1">
                     <span>Date opération</span>
                     {renderSortIcon('dateOperation')}
                   </div>
                 </th>
 
                 {/* 9. Actions */}
-                <th className="px-3.5 py-3 text-right">
+                <th className="px-3.5 py-3 text-center">
                   <span>Actions</span>
                 </th>
               </tr>
@@ -321,6 +332,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                 const desc = formatOperationDescription(op.motif || op.description, op.dateRando);
                 const isPointsInit = /points?\s+accumul[eé]s?/i.test(op.motif || op.description || '');
                 const sourceInfo = formatOperationSource(op.source, op.motif || op.description);
+                const isFfbcOp = Boolean(sourceInfo.isFfbc || op.source?.includes('FFBC'));
 
                 return (
                   <tr key={op.id} className="hover:bg-emerald-50/30 transition-colors group">
@@ -374,11 +386,13 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                     </td>
 
                     {/* Source */}
-                    <td className="px-3.5 py-3 whitespace-nowrap">
+                    <td className="px-3.5 py-3 whitespace-nowrap text-center">
                       <span
                         className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                          sourceInfo.isGoogleScript
-                            ? 'bg-blue-50 text-blue-700 border-blue-200 font-bold'
+                          isFfbcOp
+                            ? 'bg-blue-100 text-blue-900 border-blue-300 font-bold'
+                            : sourceInfo.isGoogleScript
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200 font-bold'
                             : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                         }`}
                       >
@@ -386,9 +400,9 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                       </span>
                     </td>
 
-                    <td className="px-3.5 py-3 text-gray-500 text-[11px] font-mono whitespace-nowrap">
+                    <td className="px-3.5 py-3 text-gray-500 text-[11px] font-mono whitespace-nowrap text-center">
                       {op.mail ? (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center justify-center gap-1">
                           <Mail className="w-3 h-3 text-gray-400" />
                           <span className="truncate max-w-[140px]" title={op.mail}>
                             {op.mail}
@@ -399,30 +413,32 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                       )}
                     </td>
 
-                    <td className="px-3.5 py-3 font-mono text-[11px] text-gray-600 whitespace-nowrap">
-                      <div className="flex items-center gap-1">
+                    <td className="px-3.5 py-3 font-mono text-[11px] text-gray-600 whitespace-nowrap text-center">
+                      <div className="flex items-center justify-center gap-1">
                         <Clock className="w-3 h-3 text-gray-400" />
                         <span>{op.dateOperation}</span>
                       </div>
                     </td>
 
-                    <td className="px-3.5 py-3 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="px-3.5 py-3 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => {
-                            if (!op.isChecked && canWrite) onEditOperation(op);
+                            if (!op.isChecked && canWrite && !isFfbcOp) onEditOperation(op);
                           }}
-                          disabled={op.isChecked || !canWrite}
+                          disabled={op.isChecked || !canWrite || isFfbcOp}
                           title={
-                            op.isChecked
+                            isFfbcOp
+                              ? 'Sortie officielle FFBC (synchronisée depuis GitHub) : non modifiable.'
+                              : op.isChecked
                               ? 'Opération validée (case cochée en colonne E) : modification verrouillée.'
                               : !canWrite
                               ? "Action désactivée : votre compte Google n'a pas les droits d'écriture (Éditeur) sur le classeur."
                               : 'Modifier cette opération (recharger dans le formulaire)'
                           }
                           className={`p-1.5 rounded-lg border transition-colors ${
-                            op.isChecked || !canWrite
+                            op.isChecked || !canWrite || isFfbcOp
                               ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
                               : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border-emerald-200'
                           }`}
@@ -433,18 +449,20 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            if (!op.isChecked && canWrite) onDeleteOperation(op);
+                            if (!op.isChecked && canWrite && !isFfbcOp) onDeleteOperation(op);
                           }}
-                          disabled={op.isChecked || !canWrite}
+                          disabled={op.isChecked || !canWrite || isFfbcOp}
                           title={
-                            op.isChecked
+                            isFfbcOp
+                              ? 'Sortie officielle FFBC (synchronisée depuis GitHub) : non supprimable.'
+                              : op.isChecked
                               ? 'Opération validée (case cochée en colonne E) : suppression verrouillée.'
                               : !canWrite
                               ? "Action désactivée : votre compte Google n'a pas les droits d'écriture (Éditeur) sur le classeur."
                               : 'Supprimer cette opération'
                           }
                           className={`p-1.5 rounded-lg border transition-colors ${
-                            op.isChecked || !canWrite
+                            op.isChecked || !canWrite || isFfbcOp
                               ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
                               : 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border-red-200'
                           }`}

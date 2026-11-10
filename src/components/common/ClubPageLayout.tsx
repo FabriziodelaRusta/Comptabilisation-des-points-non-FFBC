@@ -59,7 +59,7 @@ export const ClubPageLayout: React.FC<ClubPageLayoutProps> = ({
   pageTitle = 'Comptabilisation des points non-FFBC',
   clubSubtitle = "Roue Princière d'Allain",
   badgeLabel,
-  version = '0.14',
+  version = '1.4',
   user,
   sheetConfig,
   userPermission,
@@ -86,28 +86,33 @@ export const ClubPageLayout: React.FC<ClubPageLayoutProps> = ({
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
       {/* 1. HEADER BANNER — AUX COULEURS ET STYLE DE Callendrier_FFBC_Abonnement */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-xs">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-3">
-          {/* PARTIE GAUCHE DU HEADER : IDENTIQUE À Callendrier_FFBC_Abonnement */}
-          <div className="flex items-center gap-2 sm:gap-2.5 bg-slate-50/80 sm:bg-transparent p-1.5 sm:p-0 rounded-xl border sm:border-0 border-slate-200/70">
-            <ClubColorStripe className="h-9 sm:h-12" />
-            <div className="w-9 h-11 sm:w-12 sm:h-14 shrink-0 flex items-center justify-center relative">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-xs overflow-hidden">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 min-h-[72px] sm:min-h-[80px] px-3 sm:px-6">
+          {/* PARTIE GAUCHE DU HEADER : BANDES COLORÉES (À GAUCHE DU LOGO) + LOGO + TITRES */}
+          <div className="flex items-center gap-3 sm:gap-3.5 py-2">
+            {/* 1. Les 3 bandes colorées à gauche du logo et sur la hauteur du logo */}
+            <ClubColorStripe className="h-12 sm:h-14 rounded-xs overflow-hidden" />
+
+            {/* 2. Le logo RPA officiel */}
+            <div className="shrink-0 flex items-center justify-center">
               {logoLoaded ? (
                 <img
                   src="https://fabriziodelarusta.github.io/icons/logo-RPA_bleu.png"
                   alt="Logo Club RPA"
                   referrerPolicy="no-referrer"
                   onError={() => setLogoLoaded(false)}
-                  className="max-h-full max-w-full object-contain filter drop-shadow-xs"
+                  className="h-12 w-auto sm:h-14 object-contain filter drop-shadow-xs"
                 />
               ) : (
-                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-blue-600 text-white font-black text-xs sm:text-sm flex items-center justify-center shadow-xs">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl bg-[#009ee2] text-white font-black text-sm sm:text-base flex items-center justify-center shadow-xs">
                   RPA
                 </div>
               )}
             </div>
-            <div className="min-w-0 pr-1">
-              <div className="flex items-center gap-2">
+
+            {/* 3. Titre et sous-titres */}
+            <div className="min-w-0 py-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-sm sm:text-lg font-black text-slate-900 tracking-tight leading-tight">
                   {pageTitle}
                 </h1>
@@ -115,7 +120,7 @@ export const ClubPageLayout: React.FC<ClubPageLayoutProps> = ({
                   v{version}
                 </span>
               </div>
-              <p className="text-xs sm:text-sm font-bold text-blue-600 leading-tight">
+              <p className="text-xs sm:text-sm font-bold text-[#009ee2] leading-tight">
                 {clubSubtitle}
               </p>
               <div className="text-[10px] sm:text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">

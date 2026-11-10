@@ -8,7 +8,7 @@ interface FooterProps {
   version?: string;
 }
 
-export const Footer: React.FC<FooterProps> = ({ sheetConfig, onOpenSettings, version = '0.14' }) => {
+export const Footer: React.FC<FooterProps> = ({ sheetConfig, onOpenSettings, version = '1.4' }) => {
   return (
     <footer className="mt-auto border-t border-slate-200 bg-white py-4 px-4 text-center text-xs text-slate-500 space-y-1 select-none">
       {/* Signature avec id="footer" et sub id="version" comme dans Callendrier_FFBC_Abonnement */}

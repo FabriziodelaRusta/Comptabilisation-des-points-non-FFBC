@@ -4,6 +4,8 @@
  * Règle de calcul : 1 point max par semaine active quel que soit le nombre de randos
  */
 
+import { Member, OperationRecord } from '../types';
+
 export interface FfbcParticipation {
   id: string;
   dateStr: string;
@@ -264,8 +266,11 @@ export async function loadFfbcParticipations(
         const parsedDate = parseFfbcDate(dateStr);
         if (!parsedDate) continue;
 
-        // Filtrage strict : la participation doit appartenir à la saison
-        if (!isDateInSeason(parsedDate, seasonYear)) continue;
+        // Date au format français standard DD/MM/YYYY
+        const d = String(parsedDate.getDate()).padStart(2, '0');
+        const m = String(parsedDate.getMonth() + 1).padStart(2, '0');
+        const y = parsedDate.getFullYear();
+        const formattedDateStr = `${d}/${m}/${y}`;
 
         const randoName = (fields[1] || 'Rando').trim();
         const rawNom = (fields[2] || '').trim();
@@ -278,8 +283,8 @@ export async function loadFfbcParticipations(
         const { weekNumber, year: weekYear, weekKey } = getIsoWeek(parsedDate);
 
         rawParticipations.push({
-          id: `ffbc-${filename}-${idx}-${dateStr}-${rawNom}`,
-          dateStr,
+          id: `ffbc-${filename}-${idx}-${formattedDateStr}-${rawNom}`,
+          dateStr: formattedDateStr,
           parsedDate,
           randoName,
           nom: rawNom,
@@ -314,28 +319,30 @@ export async function loadFfbcParticipations(
   const membersMap = new Map<string, MemberFfbcSummary>();
 
   for (const part of deduplicated) {
-    const normKey = normalizeNameForMatch(part.nom);
-    if (!membersMap.has(normKey)) {
-      membersMap.set(normKey, {
-        nom: part.nom,
-        pointsFfbc: 0,
-        totalKmFfbc: 0,
-        totalRandosFfbc: 0,
-        activeWeeksCount: 0,
-        participations: [],
-        participationsByWeek: {},
-      });
-    }
+    if (isDateInSeason(part.parsedDate, seasonYear)) {
+      const normKey = normalizeNameForMatch(part.nom);
+      if (!membersMap.has(normKey)) {
+        membersMap.set(normKey, {
+          nom: part.nom,
+          pointsFfbc: 0,
+          totalKmFfbc: 0,
+          totalRandosFfbc: 0,
+          activeWeeksCount: 0,
+          participations: [],
+          participationsByWeek: {},
+        });
+      }
 
-    const summary = membersMap.get(normKey)!;
-    summary.participations.push(part);
-    summary.totalRandosFfbc += 1;
-    summary.totalKmFfbc = Math.round((summary.totalKmFfbc + part.km) * 10) / 10;
+      const summary = membersMap.get(normKey)!;
+      summary.participations.push(part);
+      summary.totalRandosFfbc += 1;
+      summary.totalKmFfbc = Math.round((summary.totalKmFfbc + part.km) * 10) / 10;
 
-    if (!summary.participationsByWeek[part.weekKey]) {
-      summary.participationsByWeek[part.weekKey] = [];
+      if (!summary.participationsByWeek[part.weekKey]) {
+        summary.participationsByWeek[part.weekKey] = [];
+      }
+      summary.participationsByWeek[part.weekKey].push(part);
     }
-    summary.participationsByWeek[part.weekKey].push(part);
   }
 
   // Application de la règle : 1 point max par semaine active
@@ -378,4 +385,78 @@ export function findMemberFfbcSummary(
   }
 
   return null;
+}
+
+/**
+ * Convertit l'ensemble des participations FFBC en OperationRecord pour affichage dans la liste des opérations en bas de page
+ * - 1 point max par semaine active (la 1ère rando chronologique de la semaine donne 1 pt, les suivantes 0 pt avec mention)
+ * - Associe le nom canonique du membre si présent dans la liste des membres inscrits
+ * - Trié par défaut par date de rando de la plus récente à la plus ancienne
+ */
+export function convertFfbcToOperationRecords(
+  ffbcData: FfbcSeasonData | null | undefined,
+  members?: Member[]
+): OperationRecord[] {
+  if (!ffbcData || !ffbcData.allParticipations || ffbcData.allParticipations.length === 0) return [];
+  const operations: OperationRecord[] = [];
+
+  // Ne retenir strictement que les participations appartenant à la saison active du tableau
+  const seasonParticipations = ffbcData.allParticipations.filter((part) =>
+    isDateInSeason(part.parsedDate, ffbcData.seasonYear)
+  );
+  if (seasonParticipations.length === 0) return [];
+
+  // Regroupement par membre normalisé et par semaine ISO pour attribuer 1 point max par semaine
+  const memberWeekMap = new Map<string, FfbcParticipation[]>();
+
+  for (const part of seasonParticipations) {
+    const memberKey = normalizeNameForMatch(part.nom);
+    const key = `${memberKey}___${part.weekKey}`;
+    if (!memberWeekMap.has(key)) {
+      memberWeekMap.set(key, []);
+    }
+    memberWeekMap.get(key)!.push(part);
+  }
+
+  for (const parts of memberWeekMap.values()) {
+    let canonicalName = parts[0].nom;
+    if (members && members.length > 0) {
+      const matched = members.find((m) => areMemberNamesEqual(m.nom, canonicalName));
+      if (matched) {
+        canonicalName = matched.nom;
+      }
+    }
+
+    // Trier chronologiquement dans la semaine pour que la 1ère rando reçoive le point
+    const sorted = [...parts].sort((a, b) => a.parsedDate.getTime() - b.parsedDate.getTime());
+
+    sorted.forEach((part, index) => {
+      const getsPoint = index === 0;
+      operations.push({
+        id: part.id,
+        dateRando: part.dateStr,
+        membre: canonicalName,
+        points: getsPoint ? 1 : 0,
+        motif: part.randoName || 'Rando FFBC',
+        description: part.parcours
+          ? `${part.parcours} · Semaine ${part.weekNumber}${!getsPoint ? ' (rando supp. sem.)' : ''}`
+          : `Semaine ${part.weekNumber} · FFBC${!getsPoint ? ' (rando supp. sem.)' : ''}`,
+        km: part.km > 0 ? part.km : '',
+        source: 'FFBC (GitHub)',
+        mail: '',
+        dateOperation: `${part.dateStr} 00:00:00`,
+        isChecked: true, // Verrouillé : synchronisé depuis FFBC
+        syncedToGoogleSheets: false,
+      });
+    });
+  }
+
+  // Tri de la rando la plus récente à la plus ancienne
+  return operations.sort((a, b) => {
+    const parseFrDate = (s: string) => {
+      const [d, m, y] = (s || '').split('/').map(Number);
+      return y ? new Date(y, (m || 1) - 1, d || 1).getTime() : 0;
+    };
+    return parseFrDate(b.dateRando) - parseFrDate(a.dateRando);
+  });
 }

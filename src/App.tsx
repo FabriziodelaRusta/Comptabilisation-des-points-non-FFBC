@@ -54,6 +54,7 @@ import {
   loadFfbcParticipations,
   getCurrentSeasonYear,
   findMemberFfbcSummary,
+  convertFfbcToOperationRecords,
   FfbcSeasonData,
 } from './lib/ffbcLoader';
 import { BatchConfirmationModal, BatchItem } from './components/BatchConfirmationModal';
@@ -163,6 +164,16 @@ export default function App() {
     );
     return found || selectedMember;
   }, [selectedMember, membersWithPoints]);
+
+  // Convert FFBC participations into OperationRecord format for the bottom list
+  const ffbcOperations = useMemo<OperationRecord[]>(() => {
+    return convertFfbcToOperationRecords(ffbcData, members);
+  }, [ffbcData, members]);
+
+  // Combine Google Sheets operations + FFBC operations for the bottom operations list
+  const displayOperations = useMemo<OperationRecord[]>(() => {
+    return [...operations, ...ffbcOperations];
+  }, [operations, ffbcOperations]);
 
   // Loading & syncing states
   const [isLoadingMembers, setIsLoadingMembers] = useState<boolean>(false);
@@ -1188,7 +1199,7 @@ export default function App() {
         {/* Section: Filtered Operations List with Pencil & Trash */}
         <section id="recent-operations-section" className="scroll-mt-6">
           <RecentOperationsList
-            operations={operations}
+            operations={displayOperations}
             selectedMember={selectedMember}
             spreadsheetName={sheetConfig.spreadsheetName}
             isGoogleConnected={isGoogleConnected}

@@ -28,6 +28,7 @@ import { CLUB_COLORS } from './HeaderBanner';
 import {
   getCurrentSeasonYear,
   findMemberFfbcSummary,
+  areMemberNamesEqual,
   FfbcSeasonData,
   MemberFfbcSummary,
 } from '../lib/ffbcLoader';
@@ -81,6 +82,7 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [showFfbcDetails, setShowFfbcDetails] = useState(true);
+  const [showNonFfbcDetails, setShowNonFfbcDetails] = useState(true);
 
   // Compute points summary for EVERY member (combining FFBC + Non-FFBC Rando + Autres)
   const memberSummaries = useMemo<MemberPointsSummary[]>(() => {
@@ -302,6 +304,22 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
     );
   }, [selectedMemberName, memberSummaries]);
 
+  // Selected member non-FFBC operations (sorties comptabilisées dans la colonne NON-FFBC)
+  const selectedMemberNonFfbcOperations = useMemo<OperationRecord[]>(() => {
+    if (!selectedMemberName) return [];
+    return operations.filter((op) => {
+      if (!areMemberNamesEqual(op.membre, selectedMemberName)) return false;
+      const motifText = `${op.motif || ''} ${op.description || ''}`.toLowerCase();
+      const hasRando = motifText.includes('rando');
+      const hasNonFfbc =
+        motifText.includes('non ffbc') ||
+        motifText.includes('non-ffbc') ||
+        motifText.includes('nonffbc') ||
+        motifText.includes('non_ffbc');
+      return hasRando && hasNonFfbc;
+    });
+  }, [selectedMemberName, operations]);
+
   const handleSort = (field: 'total' | 'ffbc' | 'rando' | 'autres' | 'nom') => {
     if (sortField === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -326,19 +344,28 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
       const pageWidth = doc.internal.pageSize.getWidth();
       const margin = 14;
 
-      // 1. Bande tricolore du club RPA en haut
-      const stripeHeight = 3.5;
-      const stripeWidth = pageWidth / CLUB_COLORS.length;
-      CLUB_COLORS.forEach((item, i) => {
-        const hex = item.color.replace('#', '');
-        const r = parseInt(hex.substring(0, 2), 16);
-        const g = parseInt(hex.substring(2, 4), 16);
-        const b = parseInt(hex.substring(4, 6), 16);
-        doc.setFillColor(r, g, b);
-        doc.rect(i * stripeWidth, 0, stripeWidth, stripeHeight, 'F');
-      });
+      // 1. Les 3 bandes tricolores du club RPA à gauche du logo (hauteur du logo : 16mm)
+      const logoTop = 10;
+      const logoHeight = 16;
+      const logoWidth = 16;
 
-      // 2. Logo RPA
+      // Bande bleu ciel (#009ee2)
+      doc.setFillColor(0, 158, 226);
+      doc.rect(margin, logoTop, 2.5, logoHeight, 'F');
+
+      // Bande blanche (#ffffff) avec bordure discrète
+      doc.setFillColor(255, 255, 255);
+      doc.rect(margin + 2.5, logoTop, 1.4, logoHeight, 'F');
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.1);
+      doc.rect(margin + 2.5, logoTop, 1.4, logoHeight, 'S');
+
+      // Bande verte (#5daf32)
+      doc.setFillColor(93, 175, 50);
+      doc.rect(margin + 3.9, logoTop, 1.4, logoHeight, 'F');
+
+      // 2. Logo RPA à droite des bandes tricolores
+      const logoX = margin + 7.5;
       const logoUrl = 'https://fabriziodelarusta.github.io/icons/logo-RPA_bleu.png';
       try {
         const img = new Image();
@@ -348,29 +375,22 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
           img.onerror = reject;
           img.src = logoUrl;
         });
-        doc.addImage(img, 'PNG', margin, 10, 16, 16);
+        doc.addImage(img, 'PNG', logoX, logoTop, logoWidth, logoHeight);
       } catch {
         doc.setFillColor(37, 99, 235);
-        doc.roundedRect(margin, 10, 16, 16, 2, 2, 'F');
+        doc.roundedRect(logoX, logoTop, logoWidth, logoHeight, 2, 2, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
-        doc.text('RPA', margin + 4, 20);
+        doc.text('RPA', logoX + 4, logoTop + 10);
       }
 
-      // 3. Header Texts
-      const textStartX = margin + 22;
+      // 3. Header Texts (à droite du logo)
+      const textStartX = logoX + logoWidth + 5;
       doc.setTextColor(15, 23, 42);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.text(`Comptabilisation des points · Saison ${seasonYear}`, textStartX, 15);
-
-      // Version badge
-      doc.setFillColor(219, 234, 254);
-      doc.roundedRect(textStartX + 84, 11, 12, 5, 1, 1, 'F');
-      doc.setTextColor(30, 64, 175);
-      doc.setFontSize(8);
-      doc.text('v1.3', textStartX + 85.5, 14.8);
 
       // Subtitle
       doc.setTextColor(37, 99, 235);
@@ -436,11 +456,11 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
         foot: [footRow],
         theme: 'striped',
         headStyles: {
-          fillColor: [30, 58, 138],
+          fillColor: [0, 158, 226],
           textColor: [255, 255, 255],
           fontStyle: 'bold',
           fontSize: 8.5,
-          halign: 'left',
+          halign: 'center',
         },
         columnStyles: {
           0: { cellWidth: 'auto', fontStyle: 'bold' },
@@ -727,6 +747,21 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                     {showFfbcDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                   </button>
                 )}
+                {selectedMemberNonFfbcOperations.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNonFfbcDetails(!showNonFfbcDetails)}
+                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-white px-2.5 py-1 rounded-lg border border-emerald-300 hover:border-emerald-400 transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
+                  >
+                    <Bike className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>
+                      {showNonFfbcDetails
+                        ? 'Masquer sorties NON-FFBC'
+                        : `Voir ${selectedMemberNonFfbcOperations.length} sorties NON-FFBC`}
+                    </span>
+                    {showNonFfbcDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                )}
                 {onSelectMember && (
                   <button
                     type="button"
@@ -763,12 +798,12 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                   </div>
 
                   <div className="overflow-x-auto max-h-48 overflow-y-auto rounded-xl border border-blue-100 bg-white">
-                    <table className="w-full text-left text-xs divide-y divide-blue-50">
-                      <thead className="bg-blue-50/70 text-blue-900 font-bold uppercase text-[10px]">
+                    <table className="w-full text-center text-xs divide-y divide-blue-50">
+                      <thead className="bg-[#009ee2] text-white font-bold uppercase text-[10px]">
                         <tr>
-                          <th className="px-3 py-2">Date</th>
-                          <th className="px-3 py-2">Randonnée</th>
-                          <th className="px-3 py-2">Parcours</th>
+                          <th className="px-3 py-2 text-center">Date</th>
+                          <th className="px-3 py-2 text-center">Randonnée</th>
+                          <th className="px-3 py-2 text-center">Parcours</th>
                           <th className="px-3 py-2 text-center">Distance</th>
                           <th className="px-3 py-2 text-center">Semaine ISO</th>
                         </tr>
@@ -794,6 +829,61 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                   </div>
                 </div>
               )}
+
+            {/* Expandable NON-FFBC Participations Card for the selected member */}
+            {selectedMemberNonFfbcOperations.length > 0 && showNonFfbcDetails && (
+              <div className="p-3.5 bg-gradient-to-r from-emerald-50/60 to-teal-50/40 rounded-2xl border border-emerald-200/80 space-y-2 text-xs">
+                <div className="flex items-center justify-between font-bold text-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Bike className="w-4 h-4 text-emerald-600" />
+                    <span>
+                      Sorties NON-FFBC ({selectedMemberSummary?.pointsNonFfbcRando || 0} point
+                      {(selectedMemberSummary?.pointsNonFfbcRando || 0) > 1 ? 's' : ''} •{' '}
+                      {selectedMemberNonFfbcOperations.length} sortie
+                      {selectedMemberNonFfbcOperations.length > 1 ? 's' : ''})
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-emerald-700 font-semibold bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                    Saisie classeur Google Sheets
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto max-h-48 overflow-y-auto rounded-xl border border-emerald-100 bg-white">
+                  <table className="w-full text-center text-xs divide-y divide-emerald-50">
+                    <thead className="bg-[#5daf32] text-white font-bold uppercase text-[10px]">
+                      <tr>
+                        <th className="px-3 py-2 text-center">Date</th>
+                        <th className="px-3 py-2 text-center">Description / Motif</th>
+                        <th className="px-3 py-2 text-center">Distance</th>
+                        <th className="px-3 py-2 text-center">Points</th>
+                        <th className="px-3 py-2 text-center">Source</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedMemberNonFfbcOperations.map((op, idx) => (
+                        <tr key={op.id || `${op.dateRando}-${idx}`} className="hover:bg-emerald-50/30">
+                          <td className="px-3 py-2 font-mono text-slate-700">{op.dateRando}</td>
+                          <td className="px-3 py-2 font-semibold text-slate-900">
+                            {op.description || op.motif || 'Rando non-FFBC'}
+                          </td>
+                          <td className="px-3 py-2 text-center font-bold text-emerald-700">
+                            {op.km ? `${op.km} km` : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                              +{op.points} pt{Number(op.points) > 1 ? 's' : ''}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-center text-[10px] text-slate-500">
+                            {op.source || 'Google Sheets'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -802,20 +892,20 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
       <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs divide-y divide-slate-100">
-            <thead className="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider text-[11px] select-none">
+            <thead className="bg-[#009ee2] text-white font-bold uppercase tracking-wider text-[11px] select-none">
               <tr>
                 {/* 1. Membre */}
                 <th
                   onClick={() => handleSort('nom')}
-                  className="px-5 py-3 cursor-pointer hover:bg-slate-100 transition-colors"
+                  className="px-5 py-3.5 cursor-pointer hover:bg-[#008cc9] transition-colors text-center"
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center justify-center gap-1.5">
                     <span>Membre</span>
                     {sortField === 'nom' &&
                       (sortOrder === 'asc' ? (
-                        <ArrowUp className="w-3 h-3 text-blue-600" />
+                        <ArrowUp className="w-3.5 h-3.5 text-white" />
                       ) : (
-                        <ArrowDown className="w-3 h-3 text-blue-600" />
+                        <ArrowDown className="w-3.5 h-3.5 text-white" />
                       ))}
                   </div>
                 </th>
@@ -823,15 +913,15 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                 {/* 2. FFBC */}
                 <th
                   onClick={() => handleSort('ffbc')}
-                  className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors w-40"
+                  className="px-4 py-3.5 text-center cursor-pointer hover:bg-[#008cc9] transition-colors w-40"
                 >
-                  <div className="flex items-center justify-end gap-1.5">
+                  <div className="flex items-center justify-center gap-1.5">
                     <span>FFBC</span>
                     {sortField === 'ffbc' &&
                       (sortOrder === 'desc' ? (
-                        <ArrowDown className="w-3 h-3 text-blue-600" />
+                        <ArrowDown className="w-3.5 h-3.5 text-white" />
                       ) : (
-                        <ArrowUp className="w-3 h-3 text-blue-600" />
+                        <ArrowUp className="w-3.5 h-3.5 text-white" />
                       ))}
                   </div>
                 </th>
@@ -839,15 +929,15 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                 {/* 3. NON-FFBC */}
                 <th
                   onClick={() => handleSort('rando')}
-                  className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors w-40"
+                  className="px-4 py-3.5 text-center cursor-pointer hover:bg-[#008cc9] transition-colors w-40"
                 >
-                  <div className="flex items-center justify-end gap-1.5">
+                  <div className="flex items-center justify-center gap-1.5">
                     <span>NON-FFBC</span>
                     {sortField === 'rando' &&
                       (sortOrder === 'desc' ? (
-                        <ArrowDown className="w-3 h-3 text-blue-600" />
+                        <ArrowDown className="w-3.5 h-3.5 text-white" />
                       ) : (
-                        <ArrowUp className="w-3 h-3 text-blue-600" />
+                        <ArrowUp className="w-3.5 h-3.5 text-white" />
                       ))}
                   </div>
                 </th>
@@ -855,15 +945,15 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                 {/* 4. AUTRES */}
                 <th
                   onClick={() => handleSort('autres')}
-                  className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors w-32"
+                  className="px-4 py-3.5 text-center cursor-pointer hover:bg-[#008cc9] transition-colors w-32"
                 >
-                  <div className="flex items-center justify-end gap-1.5">
+                  <div className="flex items-center justify-center gap-1.5">
                     <span>AUTRES</span>
                     {sortField === 'autres' &&
                       (sortOrder === 'desc' ? (
-                        <ArrowDown className="w-3 h-3 text-blue-600" />
+                        <ArrowDown className="w-3.5 h-3.5 text-white" />
                       ) : (
-                        <ArrowUp className="w-3 h-3 text-blue-600" />
+                        <ArrowUp className="w-3.5 h-3.5 text-white" />
                       ))}
                   </div>
                 </th>
@@ -871,15 +961,15 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                 {/* 5. Total Points Saison */}
                 <th
                   onClick={() => handleSort('total')}
-                  className="px-5 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors w-40"
+                  className="px-5 py-3.5 text-center cursor-pointer hover:bg-[#008cc9] transition-colors w-40"
                 >
-                  <div className="flex items-center justify-end gap-1.5">
+                  <div className="flex items-center justify-center gap-1.5">
                     <span>Total {seasonYear}</span>
                     {sortField === 'total' &&
                       (sortOrder === 'desc' ? (
-                        <ArrowDown className="w-3 h-3 text-blue-600" />
+                        <ArrowDown className="w-3.5 h-3.5 text-white" />
                       ) : (
-                        <ArrowUp className="w-3 h-3 text-blue-600" />
+                        <ArrowUp className="w-3.5 h-3.5 text-white" />
                       ))}
                   </div>
                 </th>
@@ -916,7 +1006,7 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                       }
                       className={`transition-colors cursor-pointer select-none ${
                         isSelected
-                          ? 'bg-blue-100/90 border-l-4 border-l-blue-600 font-medium shadow-2xs'
+                          ? 'bg-blue-100/90 border-l-4 border-l-[#009ee2] font-medium shadow-2xs'
                           : idx % 2 === 1
                           ? 'bg-slate-50/30 hover:bg-blue-50/60'
                           : 'bg-white hover:bg-blue-50/60'
@@ -933,7 +1023,7 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                             {m.nom}
                           </span>
                           {isSelected && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2 py-0.5 rounded-md shadow-2xs">
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-[#009ee2] text-white px-2 py-0.5 rounded-md shadow-2xs">
                               Détail affiché
                             </span>
                           )}
@@ -941,8 +1031,8 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                       </td>
 
                       {/* 2. Points FFBC */}
-                      <td className="px-4 py-3.5 text-right">
-                        <div className="inline-flex flex-col items-end">
+                      <td className="px-4 py-3.5 text-center">
+                        <div className="inline-flex flex-col items-center">
                           <span
                             className={`font-mono font-bold text-xs px-2 py-0.5 rounded-md ${
                               m.pointsFfbc > 0
@@ -960,8 +1050,8 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                         </div>
                       </td>
 
-                      {/* 3. Non-FFBC (Rando) */}
-                      <td className="px-4 py-3.5 text-right">
+                      {/* 3. NON-FFBC */}
+                      <td className="px-4 py-3.5 text-center">
                         <span
                           className={`font-mono font-bold text-xs px-2 py-0.5 rounded-md inline-block ${
                             m.pointsNonFfbcRando > 0
@@ -976,8 +1066,8 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                         </span>
                       </td>
 
-                      {/* 4. Autres */}
-                      <td className="px-4 py-3.5 text-right">
+                      {/* 4. AUTRES */}
+                      <td className="px-4 py-3.5 text-center">
                         <span
                           className={`font-mono font-bold text-xs px-2 py-0.5 rounded-md inline-block ${
                             m.pointsAutres > 0
@@ -993,7 +1083,7 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                       </td>
 
                       {/* 5. Total Points */}
-                      <td className="px-5 py-3.5 text-right">
+                      <td className="px-5 py-3.5 text-center">
                         <span
                           className={`font-mono font-black text-sm px-2.5 py-0.5 rounded-lg inline-block ${
                             m.totalPoints > 0
@@ -1027,16 +1117,16 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
                       {filteredAndSortedMembers.length > 1 ? 's' : ''})
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-right font-mono font-black text-xs text-blue-800">
+                  <td className="px-4 py-4 text-center font-mono font-black text-xs text-blue-800">
                     {totalFilteredFfbc} pts
                   </td>
-                  <td className="px-4 py-4 text-right font-mono font-black text-xs text-emerald-800">
+                  <td className="px-4 py-4 text-center font-mono font-black text-xs text-emerald-800">
                     {totalFilteredRando > 0 ? `+${totalFilteredRando}` : totalFilteredRando} pts
                   </td>
-                  <td className="px-4 py-4 text-right font-mono font-black text-xs text-purple-800">
+                  <td className="px-4 py-4 text-center font-mono font-black text-xs text-purple-800">
                     {totalFilteredAutres > 0 ? `+${totalFilteredAutres}` : totalFilteredAutres} pts
                   </td>
-                  <td className="px-5 py-4 text-right font-mono font-black text-base text-blue-700">
+                  <td className="px-5 py-4 text-center font-mono font-black text-base text-blue-700">
                     {totalFilteredPoints > 0 ? `+${totalFilteredPoints}` : totalFilteredPoints} pts
                   </td>
                 </tr>
