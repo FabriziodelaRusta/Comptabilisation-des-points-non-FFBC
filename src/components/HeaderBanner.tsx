@@ -84,7 +84,7 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
                 Comptabilisation des points non-FFBC
               </h1>
               <span className="text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-800">
-                v1.0
+                v1.3
               </span>
             </div>
             <p className="text-xs sm:text-sm font-bold text-blue-600 leading-tight">

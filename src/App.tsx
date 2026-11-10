@@ -50,6 +50,12 @@ import { MemberSelector, ALL_MEMBERS_OPTION } from './components/MemberSelector'
 import { OperationForm } from './components/OperationForm';
 import { BatchOperationForm } from './components/BatchOperationForm';
 import { PointsTableTab } from './components/PointsTableTab';
+import {
+  loadFfbcParticipations,
+  getCurrentSeasonYear,
+  findMemberFfbcSummary,
+  FfbcSeasonData,
+} from './lib/ffbcLoader';
 import { BatchConfirmationModal, BatchItem } from './components/BatchConfirmationModal';
 import { NewMemberModal } from './components/NewMemberModal';
 import { NewMotifModal } from './components/NewMotifModal';
@@ -112,18 +118,42 @@ export default function App() {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [editingOperation, setEditingOperation] = useState<OperationRecord | null>(null);
 
-  // Calcul dynamique et réactif du solde des points pour chaque membre à partir de la liste des opérations
+  // Saison active FFBC et participations GitHub
+  const currentSeasonYear = useMemo(() => getCurrentSeasonYear(), []);
+  const [ffbcData, setFfbcData] = useState<FfbcSeasonData | null>(null);
+  const [isLoadingFfbc, setIsLoadingFfbc] = useState<boolean>(false);
+
+  const loadFfbcData = useCallback(async () => {
+    setIsLoadingFfbc(true);
+    try {
+      const data = await loadFfbcParticipations(currentSeasonYear);
+      setFfbcData(data);
+    } catch (err) {
+      console.warn('Erreur chargement FFBC GitHub:', err);
+    } finally {
+      setIsLoadingFfbc(false);
+    }
+  }, [currentSeasonYear]);
+
+  // Chargement automatique au démarrage
+  useEffect(() => {
+    loadFfbcData();
+  }, [loadFfbcData]);
+
+  // Calcul dynamique et réactif du solde des points pour chaque membre (Non-FFBC + FFBC)
   const membersWithPoints = useMemo(() => {
     return members.map((m) => {
-      const totalPoints = operations
+      const opsPoints = operations
         .filter((op) => (op.membre || '').trim().toLowerCase() === (m.nom || '').trim().toLowerCase())
         .reduce((sum, op) => sum + (Number(op.points) || 0), 0);
+      const ffbcSummary = ffbcData ? findMemberFfbcSummary(m.nom, ffbcData.membersMap) : null;
+      const ffbcPoints = ffbcSummary ? ffbcSummary.pointsFfbc : 0;
       return {
         ...m,
-        pointsActuels: totalPoints,
+        pointsActuels: opsPoints + ffbcPoints,
       };
     });
-  }, [members, operations]);
+  }, [members, operations, ffbcData]);
 
   const currentSelectedMemberWithPoints = useMemo(() => {
     if (!selectedMember) return null;
@@ -1002,6 +1032,8 @@ export default function App() {
               members={allMembers.length > 0 ? allMembers : membersWithPoints}
               operations={operations}
               sheetConfig={sheetConfig}
+              ffbcData={ffbcData}
+              isLoadingFfbc={isLoadingFfbc}
               selectedMemberName={
                 selectedMember && selectedMember.nom !== 'Tous' ? selectedMember.nom : null
               }
@@ -1029,8 +1061,11 @@ export default function App() {
                   }
                 }, 50);
               }}
-              onRefreshData={() => loadDataFromGoogleSheets()}
-              isLoading={isLoadingMembers || isSyncing}
+              onRefreshData={() => {
+                loadDataFromGoogleSheets();
+                loadFfbcData();
+              }}
+              isLoading={isLoadingMembers || isSyncing || isLoadingFfbc}
             />
           </div>
         )}

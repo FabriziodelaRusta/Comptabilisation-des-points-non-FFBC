@@ -23,6 +23,33 @@ import {
 import { OperationRecord, Member } from '../types';
 import { parseOperationDateTime } from '../lib/googleSheets';
 
+export function formatOperationDescription(motifOrDesc?: string, dateRando?: string): string {
+  const raw = (motifOrDesc || '').trim();
+  if (/points?\s+accumul[eé]s?/i.test(raw)) {
+    const yearMatch = raw.match(/\b(20\d{2})\b/) || (dateRando || '').match(/\b(20\d{2})\b/);
+    const year = yearMatch ? yearMatch[1] : new Date().getFullYear();
+    return `Points ${year}`;
+  }
+  return raw;
+}
+
+export function formatOperationSource(rawSource?: string, motifOrDesc?: string): { label: string; isGoogleScript: boolean } {
+  const isPointsAccumules = /points?\s+accumul[eé]s?/i.test(motifOrDesc || '');
+  const s = String(rawSource || '').trim().toLowerCase();
+  const isScript =
+    isPointsAccumules ||
+    s.includes('google script') ||
+    s.includes('script') ||
+    s.includes('json') ||
+    s.includes('import') ||
+    s.includes('.gs');
+
+  if (isPointsAccumules || isScript) {
+    return { label: 'Google Script', isGoogleScript: true };
+  }
+  return { label: rawSource || 'WebApp RPA', isGoogleScript: false };
+}
+
 interface RecentOperationsListProps {
   operations: OperationRecord[];
   selectedMember: Member | null;
@@ -51,7 +78,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
 }) => {
   const currentYear = new Date().getFullYear();
   const [filterText, setFilterText] = useState('');
-  const [sortField, setSortField] = useState<SortField>('dateOperation');
+  const [sortField, setSortField] = useState<SortField>('dateRando');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // Toggle sort order
@@ -60,7 +87,7 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection(field === 'dateOperation' ? 'desc' : 'asc');
+      setSortDirection(field === 'dateRando' || field === 'dateOperation' ? 'desc' : 'asc');
     }
   };
 
@@ -88,28 +115,36 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
   const searchFiltered = memberFiltered.filter((op) => {
     const q = filterText.toLowerCase();
     const membreStr = (op.membre || '').toLowerCase();
-    const motifStr = (op.motif || op.description || '').toLowerCase();
+    const rawMotifStr = (op.motif || op.description || '').toLowerCase();
+    const formattedDescStr = formatOperationDescription(op.motif || op.description, op.dateRando).toLowerCase();
     const kmStr = String(op.km !== undefined && op.km !== null ? op.km : '').toLowerCase();
     const dateRandoStr = op.dateRando || '';
     const dateOpStr = op.dateOperation || '';
     const mailStr = (op.mail || '').toLowerCase();
+    const sourceInfo = formatOperationSource(op.source, op.motif || op.description);
+    const sourceStr = sourceInfo.label.toLowerCase();
     return (
       membreStr.includes(q) ||
-      motifStr.includes(q) ||
+      rawMotifStr.includes(q) ||
+      formattedDescStr.includes(q) ||
       kmStr.includes(q) ||
       dateRandoStr.includes(q) ||
       dateOpStr.includes(q) ||
-      mailStr.includes(q)
+      mailStr.includes(q) ||
+      sourceStr.includes(q)
     );
   });
 
   // 3. Dynamic sorting based on sortField and sortDirection
   const sortedOperations = [...searchFiltered].sort((a, b) => {
     let cmp = 0;
-    if (sortField === 'dateOperation') {
-      cmp = parseOperationDateTime(a.dateOperation) - parseOperationDateTime(b.dateOperation);
-    } else if (sortField === 'dateRando') {
+    if (sortField === 'dateRando') {
       cmp = parseDateOnly(a.dateRando) - parseDateOnly(b.dateRando);
+      if (cmp === 0) {
+        cmp = parseOperationDateTime(a.dateOperation) - parseOperationDateTime(b.dateOperation);
+      }
+    } else if (sortField === 'dateOperation') {
+      cmp = parseOperationDateTime(a.dateOperation) - parseOperationDateTime(b.dateOperation);
     } else if (sortField === 'membre') {
       cmp = (a.membre || '').localeCompare(b.membre || '', 'fr', { sensitivity: 'base' });
     } else if (sortField === 'description') {
@@ -184,10 +219,10 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
         </div>
       </div>
 
-      {/* Summary Chips - Points */}
+      {/* Summary Chips - Solde */}
       <div className="px-5 py-2.5 bg-emerald-50/50 border-b border-emerald-100 flex flex-wrap items-center gap-4 text-xs">
         <div className="text-gray-700">
-          <span className="text-gray-500 font-semibold">Points {currentYear} :</span>{' '}
+          <span className="text-gray-500 font-semibold">Solde :</span>{' '}
           <strong className="text-emerald-800 font-extrabold text-sm ml-1">
             {totalPoints > 0 ? `+${totalPoints}` : totalPoints} pts
           </strong>
@@ -234,21 +269,21 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
 
                 {/* 3. Points */}
                 <th className="px-3.5 py-3 text-center whitespace-nowrap">
-                  <span>Points {currentYear}</span>
+                  <span>Points</span>
                 </th>
 
-                {/* 4. Motif (Col D) */}
+                {/* 4. Description */}
                 <th className="px-3 py-3 whitespace-nowrap">
-                  <span>Motif (Col D)</span>
+                  <span>Description</span>
                 </th>
 
-                {/* 5. Km (Col E) */}
+                {/* 5. Km */}
                 <th
                   onClick={() => handleSort('description')}
                   className="px-3.5 py-3 cursor-pointer hover:bg-gray-100 transition-colors select-none group text-center"
                 >
                   <div className="flex items-center justify-center gap-1">
-                    <span>Km (Col E)</span>
+                    <span>Km</span>
                     {renderSortIcon('description')}
                   </div>
                 </th>
@@ -283,6 +318,10 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
             <tbody className="divide-y divide-gray-50 bg-white">
               {sortedOperations.map((op) => {
                 const isPos = op.points >= 0;
+                const desc = formatOperationDescription(op.motif || op.description, op.dateRando);
+                const isPointsInit = /points?\s+accumul[eé]s?/i.test(op.motif || op.description || '');
+                const sourceInfo = formatOperationSource(op.source, op.motif || op.description);
+
                 return (
                   <tr key={op.id} className="hover:bg-emerald-50/30 transition-colors group">
                     <td className="px-3.5 py-3 text-gray-800 font-medium whitespace-nowrap">
@@ -315,38 +354,36 @@ export const RecentOperationsList: React.FC<RecentOperationsListProps> = ({
                       </span>
                     </td>
 
-                    {/* Motif (Col D) */}
-                    <td className="px-3 py-3 text-gray-700 text-xs font-semibold whitespace-nowrap max-w-[140px] truncate" title={op.motif || op.description}>
-                      {op.motif || op.description}
+                    {/* Description */}
+                    <td
+                      className="px-3 py-3 text-gray-700 text-xs font-semibold whitespace-nowrap max-w-[170px] truncate"
+                      title={op.motif || op.description || desc}
+                    >
+                      {isPointsInit ? (
+                        <span className="inline-flex items-center gap-1 font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/70">
+                          {desc}
+                        </span>
+                      ) : (
+                        desc
+                      )}
                     </td>
 
-                    {/* Km (Col E) */}
+                    {/* Km */}
                     <td className="px-3.5 py-3 text-gray-800 font-semibold text-center whitespace-nowrap" title={op.km ? `${op.km} km` : ''}>
                       {op.km !== undefined && op.km !== null && String(op.km).trim() !== '' ? `${op.km} km` : '—'}
                     </td>
 
+                    {/* Source */}
                     <td className="px-3.5 py-3 whitespace-nowrap">
-                      {(() => {
-                        const rawSource = String(op.source || '').trim();
-                        const isScript =
-                          rawSource.toLowerCase().includes('json') ||
-                          rawSource.toLowerCase().includes('script') ||
-                          rawSource.toLowerCase().includes('import') ||
-                          rawSource.toLowerCase().includes('.gs');
-                        const displaySource = isScript ? 'Script' : (rawSource || 'WebApp RPA');
-
-                        return (
-                          <span
-                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                              displaySource === 'Script'
-                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            }`}
-                          >
-                            {displaySource}
-                          </span>
-                        );
-                      })()}
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                          sourceInfo.isGoogleScript
+                            ? 'bg-blue-50 text-blue-700 border-blue-200 font-bold'
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        }`}
+                      >
+                        {sourceInfo.label}
+                      </span>
                     </td>
 
                     <td className="px-3.5 py-3 text-gray-500 text-[11px] font-mono whitespace-nowrap">
