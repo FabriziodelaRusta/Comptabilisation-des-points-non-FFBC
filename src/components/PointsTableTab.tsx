@@ -463,7 +463,7 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
           halign: 'center',
         },
         columnStyles: {
-          0: { cellWidth: 'auto', fontStyle: 'bold' },
+          0: { cellWidth: 'auto', fontStyle: 'bold', halign: 'left' },
           1: { cellWidth: 36, halign: 'right' },
           2: { cellWidth: 34, halign: 'right' },
           3: { cellWidth: 26, halign: 'right' },
@@ -474,6 +474,16 @@ export const PointsTableTab: React.FC<PointsTableTabProps> = ({
           textColor: [15, 23, 42],
           fontStyle: 'bold',
           fontSize: 8.5,
+        },
+        didParseCell: (data) => {
+          if (data.section === 'foot') {
+            if (data.column.index === 0) {
+              data.cell.styles.halign = 'left';
+            } else {
+              // Aligner strictement les totaux en dessous des nombres dans les colonnes
+              data.cell.styles.halign = 'right';
+            }
+          }
         },
         styles: {
           fontSize: 8,
