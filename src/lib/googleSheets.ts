@@ -556,17 +556,26 @@ export async function fetchFromAppsScript(url: string, action: string, params: R
   const query = new URLSearchParams({ action, ...params }).toString();
   const fullUrl = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}${query}`;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+
   try {
     const res = await fetch(fullUrl, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
       },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (!res.ok) throw new Error(`Erreur HTTP Apps Script (${res.status})`);
     return await res.json();
   } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err?.name === 'AbortError') {
+      throw new Error('Délai de connexion dépassé avec Google Apps Script.');
+    }
     if (
       err?.message?.includes('NetworkError') ||
       err?.message?.includes('Failed to fetch') ||

@@ -9,6 +9,7 @@ import {
 import { UserProfile, SheetConfig, UserPermission } from '../../types';
 import { Footer } from '../Footer';
 import { ClubColorStripe } from '../HeaderBanner';
+import { BikeWheelLoader } from '../BikeWheelLoader';
 
 export interface ClubPageLayoutProps {
   /** Titre affiché dans l'en-tête (par défaut : Comptabilisation des points non-FFBC) */
@@ -29,6 +30,8 @@ export interface ClubPageLayoutProps {
   isCheckingPermission?: boolean;
   /** Indique si une synchronisation de données est en cours */
   isSyncing?: boolean;
+  /** Indique si le chargement complet des données est en cours */
+  isLoading?: boolean;
   /** Action au clic sur Connexion Google */
   onSignIn?: () => void;
   /** Action au clic sur Déconnexion */
@@ -65,6 +68,7 @@ export const ClubPageLayout: React.FC<ClubPageLayoutProps> = ({
   userPermission,
   isCheckingPermission = false,
   isSyncing = false,
+  isLoading = false,
   onSignIn,
   onSignOut,
   onOpenSettings,
@@ -85,6 +89,15 @@ export const ClubPageLayout: React.FC<ClubPageLayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
+      {/* Roue de vélo moderne animée au chargement des données */}
+      {isLoading && (
+        <BikeWheelLoader
+          maxTimeoutMs={7000}
+          message="Chargement des données du club..."
+          subMessage="Synchronisation Google Sheets & FFBC..."
+        />
+      )}
+
       {/* 1. HEADER BANNER — AUX COULEURS ET STYLE DE Callendrier_FFBC_Abonnement */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-xs overflow-hidden">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 min-h-[72px] sm:min-h-[80px] px-3 sm:px-6">

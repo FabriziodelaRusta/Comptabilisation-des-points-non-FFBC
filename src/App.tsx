@@ -65,6 +65,7 @@ import { ConfirmationModal } from './components/ConfirmationModal';
 import { RecentOperationsList } from './components/RecentOperationsList';
 import { SpreadsheetSettingsModal } from './components/SpreadsheetSettingsModal';
 import { Footer } from './components/Footer';
+import { BikeWheelLoader } from './components/BikeWheelLoader';
 
 export default function App() {
   // Authentication state
@@ -136,10 +137,17 @@ export default function App() {
     }
   }, [currentSeasonYear]);
 
-  // Chargement automatique au démarrage
-  useEffect(() => {
-    loadFfbcData();
-  }, [loadFfbcData]);
+  // Clé pour mémoriser si un compte était connecté lors de la session précédente
+  const LOCAL_STORAGE_LOGGED_IN = 'rpa_user_logged_in_v1';
+
+  // Si l'utilisateur est déjà connecté à l'appel de la page, le loader s'active (max 7s, s'arrête dès que les données sont prêtes)
+  const [isConnectionLoading, setIsConnectionLoading] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('rpa_user_logged_in_v1') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // Calcul dynamique et réactif du solde des points pour chaque membre (Non-FFBC + FFBC)
   const membersWithPoints = useMemo(() => {
@@ -264,31 +272,7 @@ export default function App() {
     [sheetConfig.appsScriptUrl]
   );
 
-  // Initialize Firebase Auth listener : gère l'utilisateur et sa permission en une seule fois
-  useEffect(() => {
-    const unsubscribe = initAuth(
-      (user) => {
-        const profile: UserProfile = {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-        };
-        setCurrentUser(profile);
-        setIsGoogleConnected(true);
 
-        if (user.email) {
-          verifyIncomingPermission(user.email);
-        }
-      },
-      () => {
-        setCurrentUser(null);
-        setIsGoogleConnected(false);
-        setUserPermission(null);
-      }
-    );
-    return () => unsubscribe();
-  }, [verifyIncomingPermission]);
 
   // Si l'URL du script change manuellement dans les réglages
   useEffect(() => {
@@ -397,18 +381,117 @@ export default function App() {
     [sheetConfig.appsScriptUrl]
   );
 
-  // Charger les données une seule fois quand l'URL du script est définie
+  // Initialize Firebase Auth listener : gère l'utilisateur connecté, la synchronisation et le loader
   useEffect(() => {
-    if (sheetConfig.appsScriptUrl) {
-      loadDataFromGoogleSheets(true);
-    }
-  }, [sheetConfig.appsScriptUrl, loadDataFromGoogleSheets]);
+    let isMounted = true;
+    let initialSyncDone = false;
 
-  // Sign In handler
+    // Si la page a été appelée avec un compte déjà connecté mémorisé, on arme le timeout de sécurité de 7 secondes
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      if (localStorage.getItem(LOCAL_STORAGE_LOGGED_IN) === 'true') {
+        safetyTimer = setTimeout(() => {
+          if (isMounted) setIsConnectionLoading(false);
+        }, 7000);
+      }
+    } catch {}
+
+    const unsubscribe = initAuth(
+      async (user) => {
+        if (!isMounted) return;
+        try {
+          localStorage.setItem(LOCAL_STORAGE_LOGGED_IN, 'true');
+        } catch {}
+
+        const profile: UserProfile = {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+        };
+        setCurrentUser(profile);
+        setIsGoogleConnected(true);
+
+        // Si l'utilisateur est déjà connecté à l'appel de la page :
+        // le loader tourne le temps du chargement (max 7s, mais se termine dès que tout est prêt)
+        if (!initialSyncDone) {
+          initialSyncDone = true;
+          setIsConnectionLoading(true);
+
+          if (!safetyTimer) {
+            safetyTimer = setTimeout(() => {
+              if (isMounted) setIsConnectionLoading(false);
+            }, 7000);
+          }
+
+          try {
+            await Promise.allSettled([
+              user.email ? verifyIncomingPermission(user.email) : Promise.resolve(),
+              sheetConfig.appsScriptUrl ? loadDataFromGoogleSheets(true) : Promise.resolve(),
+              loadFfbcData(),
+            ]);
+          } catch (err) {
+            console.warn('Erreur synchronisation compte connecté:', err);
+          } finally {
+            if (safetyTimer) clearTimeout(safetyTimer);
+            if (isMounted) setIsConnectionLoading(false);
+          }
+        } else if (user.email) {
+          verifyIncomingPermission(user.email);
+        }
+      },
+      () => {
+        if (!isMounted) return;
+        try {
+          localStorage.removeItem(LOCAL_STORAGE_LOGGED_IN);
+        } catch {}
+        if (safetyTimer) clearTimeout(safetyTimer);
+        setCurrentUser(null);
+        setIsGoogleConnected(false);
+        setUserPermission(null);
+        setIsConnectionLoading(false);
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      if (safetyTimer) clearTimeout(safetyTimer);
+      unsubscribe();
+    };
+  }, [verifyIncomingPermission, loadDataFromGoogleSheets, loadFfbcData, sheetConfig.appsScriptUrl]);
+
+  // Si l'utilisateur n'est pas connecté, chargement discret en tâche de fond de ce qui est disponible
+  useEffect(() => {
+    let isLogged = false;
+    try {
+      isLogged = localStorage.getItem(LOCAL_STORAGE_LOGGED_IN) === 'true';
+    } catch {}
+
+    // Si pas connecté, charger en arrière-plan sans afficher de loader
+    if (!isLogged) {
+      loadFfbcData();
+      if (sheetConfig.appsScriptUrl) {
+        loadDataFromGoogleSheets(true).catch((err) => {
+          console.warn('Chargement silencieux non connecté:', err);
+        });
+      }
+    }
+  }, [loadFfbcData, loadDataFromGoogleSheets, sheetConfig.appsScriptUrl]);
+
+  // Sign In handler : affiche la roue de vélo compacte le temps de la connexion et synchronisation (max 7s, s'arrête dès que prêt)
   const handleSignIn = async () => {
+    setIsConnectionLoading(true);
+    const safetyTimer = setTimeout(() => {
+      setIsConnectionLoading(false);
+    }, 7000);
+
     try {
       const res = await googleSignIn();
       if (res?.user) {
+        try {
+          localStorage.setItem(LOCAL_STORAGE_LOGGED_IN, 'true');
+        } catch {}
+
         const profile: UserProfile = {
           uid: res.user.uid,
           email: res.user.email,
@@ -417,19 +500,34 @@ export default function App() {
         };
         setCurrentUser(profile);
         setIsGoogleConnected(true);
+
+        if (res.user.email) {
+          await Promise.allSettled([
+            verifyIncomingPermission(res.user.email),
+            loadDataFromGoogleSheets(true),
+            loadFfbcData(),
+          ]);
+        }
         showToast(`Connecté avec le compte ${res.user.email}`, 'success');
       }
     } catch (err: any) {
       showToast(err?.message || 'Échec de la connexion Google.', 'error');
+    } finally {
+      clearTimeout(safetyTimer);
+      setIsConnectionLoading(false);
     }
   };
 
   // Sign Out handler
   const handleSignOut = async () => {
     await logout();
+    try {
+      localStorage.removeItem(LOCAL_STORAGE_LOGGED_IN);
+    } catch {}
     setCurrentUser(null);
     setIsGoogleConnected(false);
     setUserPermission(null);
+    setIsConnectionLoading(false);
     showToast('Déconnecté du compte Google.', 'info');
   };
 
@@ -942,6 +1040,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
+      {/* Roue de vélo compacte affichée si connecté lors de l'appel de la page ou après connexion (max 7s, se termine dès que les données sont prêtes) */}
+      {isConnectionLoading && (
+        <BikeWheelLoader
+          seasonYear={currentSeasonYear}
+          maxTimeoutMs={7000}
+          message={currentUser ? "Chargement des données du club..." : "Connexion au compte..."}
+          subMessage="Synchronisation Google Sheets & FFBC..."
+          onClose={() => setIsConnectionLoading(false)}
+        />
+      )}
+
       {/* Toast Notification */}
       {toast && (
         <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-3 duration-200">
